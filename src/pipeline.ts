@@ -398,8 +398,13 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       });
     }
 
-    // OBS connect, Whisper start/health-check run in parallel
-    const obsReady = this.connectObs();
+    // OBS connect runs in the background: a missing/unreachable OBS must not
+    // block pipeline startup. The client auto-reconnects, and updateSubtitle()
+    // is guarded by isConnected().
+    void this.connectObs().catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log(`[OBS] Initial connect error: ${msg}`);
+    });
     const whisperReady = (async () => {
       if (this.whisperProc) {
         try {
@@ -417,7 +422,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
           : `[Whisper] Server not reachable at ${this.config.whisper.server}`);
       }
     })();
-    await Promise.all([obsReady, whisperReady]);
+    await whisperReady;
 
     this.lastLogTime = Date.now();
     this.statusInterval = setInterval(() => {
