@@ -14,8 +14,9 @@ if (!APPLE_ID || !APPLE_APP_SPECIFIC_PASSWORD || !APPLE_TEAM_ID) {
 }
 
 const distDir = path.resolve(__dirname, '..', 'dist');
+const productName = pkg.build?.productName ?? pkg.name;
 const dmgs = fs.readdirSync(distDir)
-  .filter(f => f.startsWith(`${pkg.name}-${pkg.version}`) && f.endsWith('.dmg'))
+  .filter(f => f.startsWith(`${productName}-${pkg.version}`) && f.endsWith('.dmg'))
   .map(f => path.join(distDir, f));
 if (dmgs.length === 0) {
   console.error(`[notarize-dmg] No DMG found in ${distDir}`);
