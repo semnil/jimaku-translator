@@ -131,7 +131,7 @@ describe('getInstalledModel', () => {
 
 describe('computeFileHash', () => {
   it('computes SHA-256 of a file', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vban-test-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jimaku-test-'));
     const tmpFile = path.join(tmpDir, 'test.bin');
     fs.writeFileSync(tmpFile, 'hello world');
     try {
@@ -139,25 +139,25 @@ describe('computeFileHash', () => {
       // SHA-256 of "hello world"
       expect(hash).toBe('b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
 
 describe('verifyFileHash', () => {
   it('returns false when no sidecar exists', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vban-test-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jimaku-test-'));
     const tmpFile = path.join(tmpDir, 'test.bin');
     fs.writeFileSync(tmpFile, 'hello');
     try {
       expect(await verifyFileHash(tmpFile)).toBe(false);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
   it('returns true when sidecar matches', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vban-test-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jimaku-test-'));
     const tmpFile = path.join(tmpDir, 'test.bin');
     fs.writeFileSync(tmpFile, 'hello world');
     const hash = await computeFileHash(tmpFile);
@@ -165,19 +165,19 @@ describe('verifyFileHash', () => {
     try {
       expect(await verifyFileHash(tmpFile)).toBe(true);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
   it('returns false when sidecar does not match', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vban-test-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jimaku-test-'));
     const tmpFile = path.join(tmpDir, 'test.bin');
     fs.writeFileSync(tmpFile, 'hello world');
     fs.writeFileSync(tmpFile + '.sha256', 'badhash');
     try {
       expect(await verifyFileHash(tmpFile)).toBe(false);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
