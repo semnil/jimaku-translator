@@ -1,6 +1,6 @@
 {
   "name": "jimaku-translator",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Real-time OBS subtitle system: VBAN audio → Whisper recognition → OBS WebSocket",
   "author": "semnil",
   "main": "dist/electron.js",
@@ -37,6 +37,7 @@
   "build": {
     "appId": "com.semnil.jimaku-translator",
     "productName": "Jimaku Translator",
+    "artifactName": "${name}-${version}-${arch}.${ext}",
     "asar": true,
     "asarUnpack": [
       "node_modules/onnxruntime-node/**/*"
@@ -73,7 +74,10 @@
       "signAndEditExecutable": false
     },
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "build/icon.png",
       "category": "public.app-category.utilities",
       "hardenedRuntime": true,
