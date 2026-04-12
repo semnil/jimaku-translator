@@ -86,6 +86,7 @@ jobs:
           path: |
             dist/jimaku-translator Setup *.exe
             dist/jimaku-translator Setup *.exe.blockmap
+            dist/latest.yml
           if-no-files-found: error
 
   build-macos:
@@ -180,6 +181,7 @@ jobs:
           path: |
             dist/jimaku-translator-*.dmg
             dist/jimaku-translator-*.dmg.blockmap
+            dist/latest-mac.yml
           if-no-files-found: error
 
   create-release:
@@ -209,3 +211,5 @@ jobs:
             artifacts/*.exe
             artifacts/*.dmg
             artifacts/*.blockmap
+            artifacts/latest.yml
+            artifacts/latest-mac.yml
