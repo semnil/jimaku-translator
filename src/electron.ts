@@ -57,7 +57,7 @@ function createMainWindow(): BrowserWindow {
     y: saved?.y,
     minWidth: 600,
     minHeight: 500,
-    title: 'jimaku-translator',
+    title: 'Jimaku Translator',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
