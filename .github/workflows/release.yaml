@@ -84,8 +84,8 @@ jobs:
         with:
           name: jimaku-translator-windows-x64
           path: |
-            dist/jimaku-translator Setup *.exe
-            dist/jimaku-translator Setup *.exe.blockmap
+            dist/*Setup*.exe
+            dist/*Setup*.exe.blockmap
             dist/latest.yml
           if-no-files-found: error
 
@@ -179,8 +179,8 @@ jobs:
         with:
           name: jimaku-translator-macos
           path: |
-            dist/jimaku-translator-*.dmg
-            dist/jimaku-translator-*.dmg.blockmap
+            dist/*.dmg
+            dist/*.dmg.blockmap
             dist/latest-mac.yml
           if-no-files-found: error
 
