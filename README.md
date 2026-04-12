@@ -197,7 +197,7 @@ App 用パスワードは https://appleid.apple.com/ で発行する。electron-
 
 `v*.*.*` 形式のタグを push すると [.github/workflows/release.yaml](.github/workflows/release.yaml) が発火し、Windows + macOS ビルドを実行してドラフトリリースを作成する。リリースノートは GitHub 自動生成 (`generate_release_notes: true`) で、前回のタグからの PR/コミットが列挙される。
 
-以下の GitHub Secrets が必要:
+macOS 署名・公証には以下の GitHub Secrets が必要 (未設定でもビルドは継続し、署名・公証なしの DMG が生成される):
 
 | Secret 名 | 用途 |
 |---|---|
@@ -212,6 +212,8 @@ App 用パスワードは https://appleid.apple.com/ で発行する。electron-
 base64 -i cert.p12 -o cert.p12.b64  # macOS
 gh secret set MACOS_SIGNING_CERT < cert.p12.b64
 ```
+
+macOS ランナー上では証明書を `$RUNNER_TEMP` 配下の永続キーチェーンにインポートしてから `dist:mac` を実行する。これは electron-builder の `CSC_LINK` 経路が使う一時キーチェーンが署名後に破棄され、後段の `notarize-dmg.cjs` で identity を見失う問題を回避するため。
 
 Windows 側は現状コード署名未設定のため、追加の Secret は不要。
 
