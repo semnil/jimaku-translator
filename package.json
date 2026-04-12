@@ -1,0 +1,91 @@
+{
+  "name": "jimaku-translator",
+  "version": "1.0.0",
+  "description": "Real-time OBS subtitle system: VBAN audio → Whisper recognition → OBS WebSocket",
+  "author": "semnil",
+  "main": "dist/electron.js",
+  "scripts": {
+    "build": "tsc && npm run copy-ui",
+    "copy-ui": "node -e \"const fs=require('fs');fs.mkdirSync('dist/ui',{recursive:true});fs.copyFileSync('src/ui/index.html','dist/ui/index.html')\"",
+    "start": "node --enable-source-maps dist/index.js",
+    "dev": "tsx src/index.ts",
+    "electron": "npm run build && electron .",
+    "electron:dev": "tsx src/electron.ts",
+    "dist:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win",
+    "dist:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac && node --env-file-if-exists=.env build/notarize-dmg.cjs",
+    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --config.mac.identity=null --config.mac.notarize=false",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6",
+    "onnxruntime-node": "^1.24.3",
+    "smol-toml": "^1.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.10.0",
+    "electron": "^40.8.5",
+    "electron-builder": "^26.8.1",
+    "rcedit": "^4.0.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.3"
+  },
+  "build": {
+    "appId": "com.semnil.jimaku-translator",
+    "productName": "jimaku-translator",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**/*"
+    ],
+    "files": [
+      "dist/**/*",
+      "!dist/mac-arm64",
+      "!dist/win-unpacked",
+      "!dist/*.dmg",
+      "!dist/*.exe",
+      "!dist/*.blockmap",
+      "!dist/*.yaml",
+      "models/**/*",
+      "config.toml",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "models",
+        "to": "models"
+      },
+      {
+        "from": "config.toml",
+        "to": "config.toml"
+      },
+      {
+        "from": "THIRD_PARTY_LICENSES.txt",
+        "to": "THIRD_PARTY_LICENSES.txt"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "afterPack": "build/afterPack.cjs",
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "license": "THIRD_PARTY_LICENSES.txt"
+    }
+  }
+}

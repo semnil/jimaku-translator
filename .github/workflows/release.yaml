@@ -1,0 +1,211 @@
+name: Release
+run-name: ${{ github.ref_name }} release build 🚀
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-event:
+    name: Check Release Tag ☑️
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      validTag: ${{ steps.check.outputs.validTag }}
+    steps:
+      - name: Check Tag ☑️
+        id: check
+        run: |
+          : Check Release Tag
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+          shopt -s extglob
+
+          if [[ "${GITHUB_EVENT_NAME}" != 'push' ]]; then
+            echo 'validTag=false' >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          tag="${GITHUB_REF_NAME#v}"
+          case "${tag}" in
+            +([0-9]).+([0-9]).+([0-9]) )
+              echo 'validTag=true' >> $GITHUB_OUTPUT
+              echo 'prerelease=false' >> $GITHUB_OUTPUT
+              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+              ;;
+            +([0-9]).+([0-9]).+([0-9])-@(beta|rc|alpha)*([0-9.]) )
+              echo 'validTag=true' >> $GITHUB_OUTPUT
+              echo 'prerelease=true' >> $GITHUB_OUTPUT
+              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo 'validTag=false' >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  build-windows:
+    name: Build for Windows 🪟
+    needs: check-event
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Up Node.js 🔧
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install Dependencies 📦
+        run: npm ci
+
+      - name: Run Tests ✅
+        run: npm test
+
+      - name: Build Windows Installer 🧱
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload Artifacts 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: jimaku-translator-windows-x64
+          path: |
+            dist/jimaku-translator Setup *.exe
+            dist/jimaku-translator Setup *.exe.blockmap
+          if-no-files-found: error
+
+  build-macos:
+    name: Build for macOS 🍏
+    needs: check-event
+    runs-on: macos-15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Up Node.js 🔧
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install Dependencies 📦
+        run: npm ci
+
+      - name: Run Tests ✅
+        run: npm test
+
+      - name: Check Signing Secrets 🔑
+        id: check-signing
+        env:
+          CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+        run: |
+          if [[ -n "$CERT" ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::MACOS_SIGNING_CERT not set — building unsigned DMG"
+          fi
+
+      - name: Import Apple Developer ID Certificate 🔑
+        if: steps.check-signing.outputs.signed == 'true'
+        env:
+          CERT_B64: ${{ secrets.MACOS_SIGNING_CERT }}
+          CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+        run: |
+          # Import the cert into a persistent keychain so both electron-builder
+          # and notarize-dmg.cjs can find the signing identity. electron-builder's
+          # built-in CSC_LINK path uses a temp keychain that is destroyed before
+          # notarize-dmg.cjs runs, which caused "item not found in keychain" errors.
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo -n "$CERT_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+
+          # Prepend our keychain to the search list so codesign finds the identity
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | sed -e 's/"//g')
+
+          rm "$RUNNER_TEMP/cert.p12"
+
+          echo '--- Signing identities ---'
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build macOS DMG (signed + notarized) 🧱
+        if: steps.check-signing.outputs.signed == 'true'
+        run: npm run dist:mac
+        env:
+          # Cert is already in the default keychain search list; don't pass
+          # CSC_LINK so electron-builder won't create a temp keychain that
+          # would hide the identity from notarize-dmg.cjs.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_USERNAME }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build macOS DMG (unsigned) 🧱
+        if: steps.check-signing.outputs.signed == 'false'
+        run: npm run dist:mac:unsigned
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload Artifacts 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: jimaku-translator-macos
+          path: |
+            dist/jimaku-translator-*.dmg
+            dist/jimaku-translator-*.dmg.blockmap
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release 🛫
+    needs: [check-event, build-windows, build-macos]
+    if: needs.check-event.outputs.validTag == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Download Build Artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release 🛫
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
+        with:
+          draft: true
+          prerelease: ${{ needs.check-event.outputs.prerelease == 'true' }}
+          tag_name: ${{ needs.check-event.outputs.version }}
+          name: ${{ needs.check-event.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.exe
+            artifacts/*.dmg
+            artifacts/*.blockmap

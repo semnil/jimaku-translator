@@ -1,0 +1,31 @@
+[vban]
+port = 6980
+stream_name = ""            # empty = accept all streams
+
+[obs]
+host = "127.0.0.1"
+port = 4455
+password = ""
+source_ja = ""
+source_en = ""
+
+[whisper]
+server = "http://127.0.0.1:8080"
+binary = ""                 # path to whisper-server binary (empty = manual management)
+model = ""                  # path to GGML model file (required when binary is set)
+
+[subtitle]
+clear_delay = 6.0
+chars_per_line = 0
+
+[vad]
+threshold = 0.5
+min_speech_ms = 500
+max_speech_ms = 10000
+
+[audio]
+rms_gate_db = -60           # RMS ゲート閾値 (dBFS)。これ未満は VAD をスキップ
+normalize_target_dbfs = -6  # 発話セグメントの正規化ターゲット (dBFS)。0 = 無効
+
+[ui]
+language = ""               # "" = auto-detect from system, "en" or "ja" to override
