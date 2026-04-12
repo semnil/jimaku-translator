@@ -1,6 +1,6 @@
 {
   "name": "jimaku-translator",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Real-time OBS subtitle system: VBAN audio → Whisper recognition → OBS WebSocket",
   "author": "semnil",
   "main": "dist/electron.js",
@@ -80,7 +80,10 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": true
+      "notarize": true,
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "jimaku-translator connects to OBS Studio and VBAN audio sources on your local network."
+      }
     },
     "afterPack": "build/afterPack.cjs",
     "nsis": {
