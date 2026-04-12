@@ -5,6 +5,7 @@ import { app, BrowserWindow, screen } from 'electron';
 
 import { Pipeline } from './pipeline.js';
 import { createServer, GUI_PORT } from './server.js';
+import { initAutoUpdater } from './updater.js';
 
 let mainWindow: BrowserWindow | null = null;
 let pipeline: Pipeline | null = null;
@@ -116,6 +117,7 @@ app.whenReady().then(async () => {
   });
 
   mainWindow = createMainWindow();
+  initAutoUpdater();
 }).catch((err) => {
   console.error('Startup failed:', err);
   app.quit();

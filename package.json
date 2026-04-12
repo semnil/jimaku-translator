@@ -11,14 +11,15 @@
     "dev": "tsx src/index.ts",
     "electron": "npm run build && electron .",
     "electron:dev": "tsx src/electron.ts",
-    "dist:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win",
-    "dist:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac && node --env-file-if-exists=.env build/notarize-dmg.cjs",
-    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --config.mac.identity=null --config.mac.notarize=false",
+    "dist:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win --publish=never",
+    "dist:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --publish=never && node --env-file-if-exists=.env build/notarize-dmg.cjs",
+    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --publish=never --config.mac.identity=null --config.mac.notarize=false",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "obs-websocket-js": "^5.0.6",
     "onnxruntime-node": "^1.24.3",
     "smol-toml": "^1.3.1"
@@ -86,6 +87,13 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "license": "THIRD_PARTY_LICENSES.txt"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "semnil",
+        "repo": "jimaku-translator"
+      }
+    ]
   }
 }
