@@ -11,7 +11,7 @@ import { EventEmitter } from 'node:events';
 const CHUNK_SIZE = 512;  // 32ms at 16kHz
 const CONTEXT_SIZE = 64; // context prepended to each chunk (required by Silero VAD)
 const STATE_DIM = 128;
-const SILENCE_RESET_SAMPLES = 16000 * 30; // Reset LSTM after 30s of non-speech
+const SILENCE_RESET_SAMPLES = 16000 * 3; // Reset LSTM after 3s of non-speech to avoid hidden-state drift
 const PRE_SPEECH_PAD_SAMPLES = 16000 * 0.5; // 500ms prepended to detected speech
 
 export interface VadOptions {
