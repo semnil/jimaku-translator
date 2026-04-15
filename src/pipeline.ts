@@ -603,10 +603,12 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       const result = await this.whisper.transcribeAndTranslate(segment.samples, 'ja', canTranslate);
       const elapsed = Date.now() - start;
 
-      if (result.ja || result.en) {
-        this.log(`[Whisper] ${elapsed}ms | JA: ${result.ja}`);
-        this.log(`[Whisper]          | EN: ${result.en}`);
-        await this.subtitle.show(result.ja, result.en).catch((e) => {
+      const ja = (result.ja ?? '').replace(/[\r\n]+/g, ' ').trim();
+      const en = (result.en ?? '').replace(/[\r\n]+/g, ' ').trim();
+      if (ja || en) {
+        this.log(`[Whisper] ${elapsed}ms | JA: ${ja}`);
+        this.log(`[Whisper]          | EN: ${en}`);
+        await this.subtitle.show(ja, en).catch((e) => {
           this.log(`[OBS] Subtitle update failed: ${e instanceof Error ? e.message : String(e)}`);
         });
       }

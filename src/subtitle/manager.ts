@@ -42,6 +42,10 @@ export class SubtitleManager extends EventEmitter<{
    * during the hold replace the pending content (latest wins).
    */
   async show(ja: string, en: string): Promise<void> {
+    // Whisper translate output can contain \n / \r which would break
+    // single-line OBS text sources; collapse to spaces before line wrapping.
+    ja = ja.replace(/[\r\n]+/g, ' ').trim();
+    en = en.replace(/[\r\n]+/g, ' ').trim();
     const now = Date.now();
     const wait = this.nextAllowedShowTime - now;
     // If a pending timer is already scheduled, always route through it so
