@@ -7,6 +7,7 @@ import { app, BrowserWindow, screen } from 'electron';
 import { Pipeline } from './pipeline.js';
 import { createServer, GUI_PORT } from './server.js';
 import { initAutoUpdater } from './updater.js';
+import { migrateLegacyDataIfNeeded } from './recognition/whisper-setup.js';
 
 let mainWindow: BrowserWindow | null = null;
 let pipeline: Pipeline | null = null;
@@ -151,9 +152,11 @@ if (!gotLock) {
   });
 }
 
-// Set data dirs for managed downloads and local config
-process.env.VBAN_WHISPER_DIR = path.join(app.getPath('userData'), 'whisper');
+// Set data dirs for managed downloads and local config.
+// JIMAKU_DATA_DIR pins the shared root so the CLI computes the same path.
+process.env.JIMAKU_DATA_DIR = app.getPath('userData');
 process.env.VBAN_LOCAL_CONFIG_DIR = app.getPath('userData');
+migrateLegacyDataIfNeeded();
 
 app.whenReady().then(async () => {
   primeLocalNetworkPermission();

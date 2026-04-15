@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { Pipeline } from './pipeline.js';
 import { createServer, GUI_PORT } from './server.js';
+import { migrateLegacyDataIfNeeded } from './recognition/whisper-setup.js';
+
+migrateLegacyDataIfNeeded();
 
 const configPath = process.argv[2] ?? path.join(process.cwd(), 'config.toml');
 const pipeline = new Pipeline(configPath);

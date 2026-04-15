@@ -178,12 +178,57 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 
 // --- Data directory ---
 
+/**
+ * Root data directory shared by Electron and CLI.
+ * Matches Electron's `app.getPath('userData')` for the "Jimaku Translator"
+ * product so the CLI and the packaged app see the same downloaded models.
+ * Override with `JIMAKU_DATA_DIR` (Electron sets this explicitly).
+ */
+export function getJimakuDataRoot(): string {
+  const env = process.env.JIMAKU_DATA_DIR;
+  if (env) return env;
+  const home = os.homedir();
+  if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'Jimaku Translator');
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
+    return path.join(appData, 'Jimaku Translator');
+  }
+  const xdg = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
+  return path.join(xdg, 'Jimaku Translator');
+}
+
 export function getWhisperDataDir(): string {
+  // Backwards compatibility with the legacy override.
   const envDir = process.env.VBAN_WHISPER_DIR;
   if (envDir) return envDir;
+  return path.join(getJimakuDataRoot(), 'whisper');
+}
 
-  const home = os.homedir();
-  return path.join(home, '.jimaku-translator', 'whisper');
+/**
+ * One-shot migration from the v1.0.x layout (~/.jimaku-translator/whisper)
+ * to the unified data root. Call once at process startup. Symlinks the legacy
+ * dir into the new location so existing downloads remain the single source of
+ * truth; falls back to a recursive copy if symlinks are unavailable (Windows
+ * without dev mode).
+ */
+export function migrateLegacyDataIfNeeded(): void {
+  if (process.env.VBAN_WHISPER_DIR) return;
+  const targetDir = path.join(getJimakuDataRoot(), 'whisper');
+  if (fs.existsSync(targetDir)) return;
+  const legacy = path.join(os.homedir(), '.jimaku-translator', 'whisper');
+  if (!fs.existsSync(legacy)) return;
+  try {
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+  } catch { /* ignore */ }
+  try {
+    fs.symlinkSync(legacy, targetDir, 'dir');
+    return;
+  } catch { /* fall through to copy */ }
+  try {
+    fs.cpSync(legacy, targetDir, { recursive: true });
+  } catch { /* ignore — user can re-download */ }
 }
 
 // --- Variant / model availability ---

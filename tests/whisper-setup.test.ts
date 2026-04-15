@@ -98,6 +98,20 @@ describe('getWhisperDataDir', () => {
       }
     }
   });
+
+  it('respects JIMAKU_DATA_DIR env', () => {
+    const originalRoot = process.env.JIMAKU_DATA_DIR;
+    const originalWhisper = process.env.VBAN_WHISPER_DIR;
+    delete process.env.VBAN_WHISPER_DIR;
+    process.env.JIMAKU_DATA_DIR = '/data/root';
+    try {
+      expect(getWhisperDataDir()).toBe(path.join('/data/root', 'whisper'));
+    } finally {
+      if (originalRoot !== undefined) process.env.JIMAKU_DATA_DIR = originalRoot;
+      else delete process.env.JIMAKU_DATA_DIR;
+      if (originalWhisper !== undefined) process.env.VBAN_WHISPER_DIR = originalWhisper;
+    }
+  });
 });
 
 describe('getAvailableBinaryVariants', () => {
