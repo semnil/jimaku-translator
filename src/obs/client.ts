@@ -23,6 +23,12 @@ export class ObsClient extends EventEmitter<{
   private connected = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionalDisconnect = false;
+  // Reconnect-loop dedupe: emit the first occurrence of a given error message,
+  // then suppress consecutive duplicates and surface a summary every 60s.
+  private lastErrorKey = '';
+  private lastErrorEmitAt = 0;
+  private suppressedErrorCount = 0;
+  private static readonly ERROR_DEDUPE_WINDOW_MS = 60_000;
 
   constructor(opts: ObsClientOptions) {
     super();
@@ -142,8 +148,30 @@ export class ObsClient extends EventEmitter<{
     });
 
     this.ws.on('ConnectionError', (err) => {
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this.emitDedupedError(err instanceof Error ? err : new Error(String(err)));
     });
+  }
+
+  private emitDedupedError(err: Error): void {
+    const key = err.message || err.name || 'unknown';
+    const now = Date.now();
+    const sameAsLast = key === this.lastErrorKey;
+    const withinWindow = now - this.lastErrorEmitAt < ObsClient.ERROR_DEDUPE_WINDOW_MS;
+
+    if (sameAsLast && withinWindow) {
+      this.suppressedErrorCount++;
+      return;
+    }
+
+    if (sameAsLast && this.suppressedErrorCount > 0) {
+      const seconds = Math.round((now - this.lastErrorEmitAt) / 1000);
+      this.emit('error', new Error(`${key} (suppressed ${this.suppressedErrorCount} similar errors over ${seconds}s)`));
+    } else {
+      this.emit('error', err);
+    }
+    this.lastErrorKey = key;
+    this.lastErrorEmitAt = now;
+    this.suppressedErrorCount = 0;
   }
 
   private scheduleReconnect(): void {
