@@ -13,6 +13,11 @@ const CONTEXT_SIZE = 64; // context prepended to each chunk (required by Silero 
 const STATE_DIM = 128;
 const SILENCE_RESET_SAMPLES = 16000 * 3; // Reset LSTM after 3s of non-speech to avoid hidden-state drift
 const PRE_SPEECH_PAD_SAMPLES = 16000 * 0.5; // 500ms prepended to detected speech
+// Extra silence retained after silenceMs is reached so Whisper sees the
+// natural sentence ending. Without this tail, end-of-utterance punctuation
+// (e.g. 「。」) is frequently dropped because the segment is sliced flush
+// against the last voiced frame.
+const TAIL_PAD_SAMPLES = Math.round(16000 * 0.125); // 125ms
 
 export interface VadOptions {
   /** Model file path. */
@@ -304,7 +309,7 @@ export class SileroVad extends EventEmitter<{
           this.silenceSamples += CHUNK_SIZE;
         }
 
-        if (this.silenceSamples >= silenceThreshold) {
+        if (this.silenceSamples >= silenceThreshold + TAIL_PAD_SAMPLES) {
           // End of speech
           if (this.speechSampleCount >= minSpeechSamples) {
             this.emitSpeech();
