@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -29,11 +30,13 @@ export interface PipelineStatus {
     port: number;
   };
   whisper: {
-    reachable: boolean;
     server: string;
     inferring: boolean;
     queueLength: number;
-  };
+  } & (
+    | { reachable: true; reason: null }
+    | { reachable: false; reason: 'no_binary' | 'no_model' | 'unreachable' | 'starting' }
+  );
   lastResult: {
     ja: string;
     en: string;
@@ -108,6 +111,9 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   private lastSampleRate = 0;
   private lastChannels = 0;
   private whisperReachable = false;
+  private whisperStarting = false;
+  /** Cached fs.existsSync results to keep getStatus() out of the syscall hot path. */
+  private whisperPathCache: { binary: string; model: string; binaryExists: boolean; modelExists: boolean } | null = null;
   private lastResult: PipelineStatus['lastResult'] = null;
   private statusInterval: ReturnType<typeof setInterval> | null = null;
   private lastEmittedJson = '';
@@ -126,6 +132,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   private captureResolve: ((samples: Int16Array) => void) | null = null;
   private captureReject: ((err: Error) => void) | null = null;
   private captureTimeout: ReturnType<typeof setTimeout> | null = null;
+  private captureFirstPacketTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(configPath: string) {
     super();
@@ -147,6 +154,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
 
   updateWhisperConfig(whisper: Config['whisper']): void {
     this.config.whisper = { ...whisper };
+    this.whisperPathCache = null;
   }
 
   updateObsConfig(obs: Config['obs']): void {
@@ -224,6 +232,9 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     if (this.captureBuffer) {
       return Promise.reject(new Error('Capture already in progress'));
     }
+    if (!this.vbanListening) {
+      return Promise.reject(new Error('VBAN receiver is not listening'));
+    }
     this.captureBuffer = [];
     this.captureSampleCount = 0;
     this.captureMaxSamples = Math.ceil((durationMs / 1000) * 16000);
@@ -232,7 +243,13 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     return new Promise((resolve, reject) => {
       this.captureResolve = resolve;
       this.captureReject = reject;
-      // Timeout: reject if capture doesn't complete within 2x the requested duration
+      // First-packet watchdog: abort early if no VBAN audio arrives at all.
+      this.captureFirstPacketTimer = setTimeout(() => {
+        if (this.captureSampleCount === 0) {
+          this.cancelCapture(new Error('No VBAN audio received within 2s — check sender'));
+        }
+      }, 2000);
+      // Hard timeout: reject if capture doesn't complete within 2x the requested duration
       this.captureTimeout = setTimeout(() => {
         this.cancelCapture(new Error('Capture timed out'));
       }, durationMs * 2 + 5000);
@@ -243,6 +260,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     if (this.captureTimeout) {
       clearTimeout(this.captureTimeout);
       this.captureTimeout = null;
+    }
+    if (this.captureFirstPacketTimer) {
+      clearTimeout(this.captureFirstPacketTimer);
+      this.captureFirstPacketTimer = null;
     }
     this.captureReject?.(err);
     this.captureBuffer = null;
@@ -272,12 +293,21 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         host: this.config.obs.host,
         port: this.config.obs.port,
       },
-      whisper: {
-        reachable: this.whisperReachable,
-        server: this.config.whisper.server,
-        inferring: this.inferring,
-        queueLength: this.inferQueue.length,
-      },
+      whisper: this.whisperReachable
+        ? {
+            reachable: true,
+            reason: null,
+            server: this.config.whisper.server,
+            inferring: this.inferring,
+            queueLength: this.inferQueue.length,
+          }
+        : {
+            reachable: false,
+            reason: this.computeWhisperReason() ?? 'unreachable',
+            server: this.config.whisper.server,
+            inferring: this.inferring,
+            queueLength: this.inferQueue.length,
+          },
       lastResult: this.lastResult,
       audio: {
         effectiveGateDb: this.computeEffectiveGateDb(),
@@ -300,6 +330,32 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     };
   }
 
+  private computeWhisperReason(): 'no_binary' | 'no_model' | 'unreachable' | 'starting' | null {
+    if (this.whisperReachable) return null;
+    if (this.whisperStarting) return 'starting';
+    const binary = this.config.whisper.binary;
+    const model = this.config.whisper.model;
+    // External-server mode (no managed binary configured) → unreachable.
+    if (!binary) return 'unreachable';
+    // Reuse cached existence results when the configured paths haven't changed.
+    // getStatus() is on the SSE hot path; sync stat per tick is wasted I/O.
+    if (
+      !this.whisperPathCache
+      || this.whisperPathCache.binary !== binary
+      || this.whisperPathCache.model !== model
+    ) {
+      this.whisperPathCache = {
+        binary,
+        model,
+        binaryExists: fs.existsSync(binary),
+        modelExists: !!model && fs.existsSync(model),
+      };
+    }
+    if (!this.whisperPathCache.binaryExists) return 'no_binary';
+    if (!this.whisperPathCache.modelExists) return 'no_model';
+    return 'unreachable';
+  }
+
   private computeEffectiveGateDb(): number {
     const staticDb = this.config.audio.rms_gate_db;
     const maxDb = this.config.audio.adaptive_gate_max_db;
@@ -314,6 +370,11 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   }
 
   async start(): Promise<void> {
+    // Reset transient state so a second start() after stop() doesn't carry
+    // stale reachability flags or cached path-existence from a prior run.
+    this.whisperReachable = false;
+    this.whisperStarting = false;
+    this.whisperPathCache = null;
     // In packaged Electron, __dirname is inside the asar archive.
     // Use process.resourcesPath (extraResources) for native addons like onnxruntime.
     const modelsDir = process.resourcesPath
@@ -408,6 +469,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
 
         // Audio capture for WAV export
         if (this.captureBuffer) {
+          if (this.captureFirstPacketTimer) {
+            clearTimeout(this.captureFirstPacketTimer);
+            this.captureFirstPacketTimer = null;
+          }
           this.captureBuffer.push(resampled.slice());
           this.captureSampleCount += resampled.length;
           if (this.captureSampleCount >= this.captureMaxSamples) {
@@ -528,12 +593,15 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     });
     const whisperReady = (async () => {
       if (this.whisperProc) {
+        this.whisperStarting = true;
         try {
           await this.whisperProc.start();
           this.whisperReachable = true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.log(`[Whisper] Failed to start managed process: ${msg}`);
+        } finally {
+          this.whisperStarting = false;
         }
       } else {
         const ok = await this.whisper.ping();
@@ -573,6 +641,9 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     this.vbanListening = false;
     this.inferring = false;
     this.inferQueue = [];
+    this.whisperReachable = false;
+    this.whisperStarting = false;
+    this.whisperPathCache = null;
     this.cancelCapture(new Error('Pipeline stopped'));
     await this.subtitle?.clear().catch(() => {});
     await this.obs?.disconnect();
