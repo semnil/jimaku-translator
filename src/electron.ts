@@ -1,3 +1,4 @@
+import dgram from 'node:dgram';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -78,6 +79,64 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
+// On macOS, the Local Network privacy prompt only fires for mDNS/Bonjour/
+// multicast/broadcast traffic. Without triggering it, unicast TCP to RFC1918
+// addresses (e.g. OBS WebSocket on a LAN PC) is silently blocked by
+// nw_path_evaluator with ECONNREFUSED/EHOSTUNREACH, and the app never appears
+// in System Settings → Privacy & Security → Local Network. Sending a single
+// mDNS query at startup surfaces the permission prompt through the documented
+// path. macOS caches the answer, so subsequent runs are free.
+function primeLocalNetworkPermission(): void {
+  if (process.platform !== 'darwin') return;
+  try {
+    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    sock.once('error', (err) => {
+      console.log(`[LocalNetwork] dgram error: ${err.message}`);
+      try { sock.close(); } catch {}
+    });
+    sock.bind(0, () => {
+      try {
+        sock.setMulticastTTL(1);
+        const query = Buffer.from([
+          0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,
+          0x09,0x5f,0x73,0x65,0x72,0x76,0x69,0x63,0x65,0x73,
+          0x07,0x5f,0x64,0x6e,0x73,0x2d,0x73,0x64,
+          0x04,0x5f,0x75,0x64,0x70,
+          0x05,0x6c,0x6f,0x63,0x61,0x6c,0x00,
+          0x00,0x0c,0x00,0x01,
+        ]);
+        console.log('[LocalNetwork] Sending mDNS probe to 224.0.0.251:5353');
+        sock.send(query, 5353, '224.0.0.251', (err) => {
+          if (err) console.log(`[LocalNetwork] send error: ${err.message}`);
+          else console.log('[LocalNetwork] mDNS probe sent');
+          setTimeout(() => { try { sock.close(); } catch {} }, 200);
+        });
+      } catch (err) {
+        console.log(`[LocalNetwork] setup error: ${err instanceof Error ? err.message : String(err)}`);
+        try { sock.close(); } catch {}
+      }
+    });
+  } catch (err) {
+    console.log(`[LocalNetwork] createSocket error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Secondary trigger: spawn `dns-sd -B` briefly. dns-sd routes through
+  // mDNSResponder, which is the documented path macOS uses to decide whether
+  // to prompt for Local Network permission. Attribution flows back to the
+  // parent process via the responsibility chain.
+  try {
+    const { spawn } = require('node:child_process') as typeof import('node:child_process');
+    const child = spawn('/usr/bin/dns-sd', ['-B', '_services._dns-sd._udp', 'local.'], {
+      stdio: 'ignore',
+      detached: false,
+    });
+    child.on('error', (err) => console.log(`[LocalNetwork] dns-sd spawn error: ${err.message}`));
+    setTimeout(() => { try { child.kill(); } catch {} }, 1500);
+  } catch (err) {
+    console.log(`[LocalNetwork] dns-sd fallback error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // Prevent multiple instances — focus existing window instead
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -97,6 +156,8 @@ process.env.VBAN_WHISPER_DIR = path.join(app.getPath('userData'), 'whisper');
 process.env.VBAN_LOCAL_CONFIG_DIR = app.getPath('userData');
 
 app.whenReady().then(async () => {
+  primeLocalNetworkPermission();
+
   const configPath = process.argv.find(a => a.endsWith('.toml'))
     ?? path.join(app.isPackaged
       ? process.resourcesPath
