@@ -32,7 +32,7 @@ h2 {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 12px;
-  color: #a0a0c0;
+  color: #c0c0e0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -54,11 +54,21 @@ h2 {
 
 .status-card .label {
   font-size: 11px;
-  color: #8888aa;
+  color: #b0b0d0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 6px;
 }
+
+.status-hint {
+  display: block;
+  font-size: 11px;
+  color: #fbbf24;
+  margin-top: 6px;
+  text-decoration: underline;
+}
+.status-hint:hover { color: #fcd34d; }
+.status-hint:focus { outline: 2px solid #fbbf24; outline-offset: 2px; }
 
 .status-card .value {
   font-size: 16px;
@@ -122,7 +132,7 @@ h2 {
 .level-bar.clip { background: #ef4444; }
 .level-label {
   font-size: 11px;
-  color: #808090;
+  color: #b0b0d0;
   margin-top: 4px;
   display: flex;
   justify-content: space-between;
@@ -147,29 +157,43 @@ h2 {
   padding: 14px;
   margin-bottom: 24px;
   border: 1px solid #2a2a4a;
-  /* Fixed to fit one JA line + one EN line. Prevents height jump between empty and filled state. */
-  height: 125px;
-  overflow: hidden;
+  /* History of up to 3 entries; scrolls when overflowing. */
+  max-height: 260px;
+  min-height: 96px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  gap: 12px;
+}
+
+.result-entry {
+  border-left: 2px solid #2a2a4a;
+  padding-left: 10px;
+}
+.result-entry.latest { border-left-color: #6366f1; }
+
+.result-entry .ts {
+  font-size: 10px;
+  color: #b0b0d0;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
 }
 
 .result-panel .lang {
   font-size: 11px;
-  color: #8888aa;
+  color: #b0b0d0;
   margin-bottom: 2px;
 }
 
 .result-panel .text {
   font-size: 15px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   word-break: break-all;
 }
 
 .result-panel .text.ja { color: #fff; }
 .result-panel .text.en { color: #a0c4ff; }
-.result-panel .empty { color: #555; font-style: italic; }
+.result-panel .empty { color: #888aa6; font-style: italic; }
 
 /* Config form */
 .config-section {
@@ -221,7 +245,7 @@ h2 {
 .field label {
   flex: 0 0 140px;
   font-size: 12px;
-  color: #9999bb;
+  color: #b8b8d4;
   text-align: right;
 }
 
@@ -375,7 +399,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   overflow-y: auto;
   font-family: "Consolas", "SF Mono", monospace;
   font-size: 11px;
-  color: #888;
+  color: #b0b0c8;
   line-height: 1.6;
   display: none;
 }
@@ -383,8 +407,20 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 .log-panel.open { display: block; }
 
 .log-panel .entry { white-space: pre-wrap; word-break: break-all; }
-.log-panel .entry .ts { color: #555; margin-right: 6px; }
+.log-panel .entry .ts { color: #888aa6; margin-right: 6px; }
 .log-panel .entry.error { color: #f87171; }
+
+/* Visible focus for keyboard navigation */
+.config-toggle:focus, .log-toggle:focus, .config-section h3:focus,
+.dl-cancel:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.field input:disabled, .field input[type="range"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* Toast notification */
 .toast {
@@ -445,6 +481,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
         <span class="indicator off" id="whisper-indicator"></span>
         <span id="whisper-status">--</span>
       </div>
+      <a href="#" id="whisper-hint" class="status-hint" style="display:none;" data-i18n="whisper_unreachable_hint">Open Whisper section to download</a>
     </div>
   </div>
 
@@ -469,7 +506,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   <!-- Last result -->
   <h2>Last Recognition</h2>
-  <div class="result-panel" id="result-panel">
+  <div class="result-panel" id="result-panel" aria-live="polite">
     <div class="empty" data-i18n="waiting">Waiting for speech...</div>
   </div>
 
@@ -523,6 +560,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
             <option value="ja" data-i18n="lang_ja">Japanese</option>
           </select>
         </div>
+      </div>
+      <div class="field" id="cfg-cc-warning-row" style="display:none;">
+        <label></label>
+        <div id="cfg-cc-warning" data-i18n="val_cc_no_source" style="flex:1;font-size:11px;color:#fbbf24;">Closed Caption is enabled but no text source is selected</div>
       </div>
       <div class="field">
         <label></label>
@@ -662,6 +703,46 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       audio_adaptive_gate: 'Adaptive Gate', audio_adaptive_margin: 'Adaptive Margin (dB)',
       audio_effective_gate: 'Effective Gate (dBFS)',
       ui_show_vad_debug: 'Show VAD Debug',
+      // Status strings
+      status_offline: 'offline', status_connected: 'connected', status_disconnected: 'disconnected',
+      status_ready: 'ready', status_unreachable: 'unreachable', status_inferring: 'inferring...',
+      status_queue_suffix: ' (q={0})',
+      whisper_unreachable_hint: 'Open Whisper section to download',
+      whisper_reason_no_binary: 'Whisper binary not installed — click to download',
+      whisper_reason_no_model: 'Whisper model not installed — click to download',
+      whisper_reason_unreachable: 'Whisper server unreachable — check Whisper section',
+      whisper_reason_starting: 'Whisper server starting...',
+      // Capture
+      capture_recording: 'Recording...', capture_failed: 'Capture failed: {0}',
+      capture_no_input: 'No VBAN input — start audio source first',
+      // Config save / reload
+      saved: 'Saved.', saved_restart: 'Saved. Restart to apply.',
+      saved_restart_obs: 'Saved. Restart to apply. OBS: use Reconnect.',
+      saved_obs: 'Saved. Use Reconnect to apply OBS changes.',
+      load_config_failed: 'Failed to load config: {0}',
+      config_reloaded: 'Config reloaded from server.',
+      sources_refreshed: 'Sources refreshed.',
+      obs_connected_toast: 'OBS connected.',
+      obs_connect_failed: 'OBS connection failed: {0}',
+      obs_reconnect_failed: 'OBS reconnect failed: {0}',
+      // Whisper download
+      tag_recommended: 'recommended', tag_installed: 'installed',
+      btn_installed: 'Installed', btn_download: 'Download',
+      download_failed: 'Download failed: {0}',
+      cancel_download: 'Cancel download',
+      extracting: 'Extracting...', verifying: 'Verifying checksum...',
+      download_complete: 'Download complete! Restart to apply.',
+      download_cancelled: 'Download cancelled.',
+      download_error: 'Download error: {0}',
+      // Validation
+      val_invalid_port: 'Invalid port: must be 1-65535',
+      val_invalid_threshold: 'VAD threshold must be between 0 and 1',
+      val_invalid_number: '{0} must be a valid number',
+      val_invalid_int: '{0} must be a non-negative integer',
+      val_cc_no_source: 'Closed Caption is enabled but no text source is selected',
+      val_cc_no_source_save: 'Saved, but Closed Caption is enabled with no text source — captions will not be sent',
+      // Last Recognition
+      result_clear: 'Clear',
     },
     ja: {
       input_label: '入力',
@@ -681,10 +762,53 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       audio_adaptive_gate: '適応ゲート', audio_adaptive_margin: '適応マージン (dB)',
       audio_effective_gate: '有効ゲート (dBFS)',
       ui_show_vad_debug: 'VAD デバッグ表示',
+      status_offline: 'オフライン', status_connected: '接続済み', status_disconnected: '切断',
+      status_ready: '待機中', status_unreachable: '到達不可', status_inferring: '推論中...',
+      status_queue_suffix: ' (待ち {0})',
+      whisper_unreachable_hint: 'Whisper セクションでダウンロード',
+      whisper_reason_no_binary: 'Whisper バイナリ未インストール — クリックでダウンロード',
+      whisper_reason_no_model: 'Whisper モデル未インストール — クリックでダウンロード',
+      whisper_reason_unreachable: 'Whisper サーバーに到達できません — Whisper セクションを確認',
+      whisper_reason_starting: 'Whisper サーバー起動中...',
+      capture_recording: '録音中...', capture_failed: 'キャプチャ失敗: {0}',
+      capture_no_input: 'VBAN 入力がありません — 先に音声ソースを開始してください',
+      saved: '保存しました。',
+      saved_restart: '保存しました。再起動で反映されます。',
+      saved_restart_obs: '保存しました。再起動で反映されます。OBS は再接続を実行してください。',
+      saved_obs: '保存しました。OBS の変更は再接続で反映されます。',
+      load_config_failed: '設定の読み込みに失敗: {0}',
+      config_reloaded: 'サーバーから設定を再読み込みしました。',
+      sources_refreshed: 'ソースを更新しました。',
+      obs_connected_toast: 'OBS に接続しました。',
+      obs_connect_failed: 'OBS 接続に失敗: {0}',
+      obs_reconnect_failed: 'OBS 再接続に失敗: {0}',
+      tag_recommended: '推奨', tag_installed: 'インストール済み',
+      btn_installed: 'インストール済み', btn_download: 'ダウンロード',
+      download_failed: 'ダウンロード失敗: {0}',
+      cancel_download: 'ダウンロードを中断',
+      extracting: '展開中...', verifying: 'チェックサム検証中...',
+      download_complete: 'ダウンロード完了! 再起動で反映されます。',
+      download_cancelled: 'ダウンロードを中断しました。',
+      download_error: 'ダウンロードエラー: {0}',
+      val_invalid_port: 'ポートは 1〜65535 の範囲で指定してください',
+      val_invalid_threshold: 'VAD しきい値は 0〜1 の範囲で指定してください',
+      val_invalid_number: '{0} は数値で指定してください',
+      val_invalid_int: '{0} は 0 以上の整数で指定してください',
+      val_cc_no_source: 'クローズドキャプションが有効ですが、テキストソースが選択されていません',
+      val_cc_no_source_save: '保存しましたが、CC 有効でソース未選択のため CC は送信されません',
+      result_clear: 'クリア',
     }
   };
 
   var currentLang = /^ja\b/i.test(navigator.language) ? 'ja' : 'en';
+
+  function t(key, sub) {
+    var dict = i18n[currentLang] || i18n.en;
+    var s = dict[key];
+    if (s === undefined) s = (i18n.en[key] !== undefined) ? i18n.en[key] : key;
+    if (sub !== undefined) s = s.replace('{0}', String(sub));
+    return s;
+  }
 
   function applyI18n(lang) {
     var dict = i18n[lang] || i18n.en;
@@ -695,6 +819,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
       var key = el.getAttribute('data-i18n-placeholder');
       if (dict[key]) el.placeholder = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-title');
+      if (dict[key]) el.title = dict[key];
     });
   }
 
@@ -759,12 +887,24 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   function setupCollapse(key, el, toggle, onToggle) {
     if (collapsed[key]) el.classList.add('collapsed');
-    toggle.addEventListener('click', function() {
+    toggle.setAttribute('role', 'button');
+    toggle.setAttribute('tabindex', '0');
+    toggle.setAttribute('aria-expanded', String(!el.classList.contains('collapsed')));
+    function fire() {
       el.classList.toggle('collapsed');
-      collapsed[key] = el.classList.contains('collapsed');
+      var isCollapsed = el.classList.contains('collapsed');
+      collapsed[key] = isCollapsed;
+      toggle.setAttribute('aria-expanded', String(!isCollapsed));
       saveCollapsed();
       if (onToggle) onToggle();
       fitWindowHeight();
+    }
+    toggle.addEventListener('click', fire);
+    toggle.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        fire();
+      }
     });
   }
 
@@ -780,14 +920,25 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   });
 
   // Log panel (uses 'open' class instead of 'collapsed')
+  logToggle.setAttribute('role', 'button');
+  logToggle.setAttribute('tabindex', '0');
   if (collapsed._log) { logToggle.classList.add('open'); logPanel.classList.add('open'); }
-  logToggle.addEventListener('click', function() {
+  logToggle.setAttribute('aria-expanded', String(logPanel.classList.contains('open')));
+  function toggleLog() {
     logToggle.classList.toggle('open');
     logPanel.classList.toggle('open');
     collapsed._log = logPanel.classList.contains('open');
+    logToggle.setAttribute('aria-expanded', String(logPanel.classList.contains('open')));
     saveCollapsed();
     if (logPanel.classList.contains('open')) logPanel.scrollTop = logPanel.scrollHeight;
     fitWindowHeight();
+  }
+  logToggle.addEventListener('click', toggleLog);
+  logToggle.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      toggleLog();
+    }
   });
   const resultPanel = document.getElementById('result-panel');
   const toast = document.getElementById('toast');
@@ -984,8 +1135,13 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     // VBAN
     var vbanActive = s.vban.listening && s.vban.packetsPerSec > 0;
     setIndicator('vban-indicator', vbanActive);
-    var vbanText = vbanActive ? s.vban.packetsPerSec + ' pkt/s' : 'offline';
+    var vbanText = vbanActive ? s.vban.packetsPerSec + ' pkt/s' : t('status_offline');
     document.getElementById('vban-status').textContent = vbanText;
+    var captureBtn = document.getElementById('capture-btn');
+    if (captureBtn && !captureBtn.dataset.busy) {
+      captureBtn.disabled = !vbanActive;
+      captureBtn.title = vbanActive ? '' : t('capture_no_input');
+    }
 
     // Level meter: dBFS log scale -80..0 → 0..100%
     var peak = s.vban.peakLevel || 0;
@@ -1003,14 +1159,20 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     // OBS
     setIndicator('obs-indicator', s.obs.connected);
     document.getElementById('obs-status').textContent =
-      s.obs.connected ? 'connected' : 'disconnected';
+      s.obs.connected ? t('status_connected') : t('status_disconnected');
 
     // Whisper
     setIndicator('whisper-indicator', s.whisper.reachable);
-    let wText = s.whisper.reachable ? 'ready' : 'unreachable';
-    if (s.whisper.inferring) wText = 'inferring...';
-    if (s.whisper.queueLength > 0) wText += ' (q=' + s.whisper.queueLength + ')';
+    let wText = s.whisper.reachable ? t('status_ready') : t('status_unreachable');
+    if (s.whisper.inferring) wText = t('status_inferring');
+    if (s.whisper.queueLength > 0) wText += t('status_queue_suffix', s.whisper.queueLength);
     document.getElementById('whisper-status').textContent = wText;
+    var hint = document.getElementById('whisper-hint');
+    if (hint) {
+      hint.style.display = s.whisper.reachable ? 'none' : '';
+      var reasonKey = 'whisper_reason_' + (s.whisper.reason || 'unreachable');
+      hint.textContent = t(reasonKey);
+    }
 
     // Audio: effective gate + detecting indicator + realtime plot
     if (s.audio) {
@@ -1050,13 +1212,39 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
         (s.lastResult.ja !== lastResultJa || s.lastResult.en !== lastResultEn)) {
       lastResultJa = s.lastResult.ja;
       lastResultEn = s.lastResult.en;
-      var dict = i18n[currentLang] || i18n.en;
-      resultPanel.innerHTML =
-        '<div class="lang">' + escapeHtml(dict.lang_ja) + '</div>' +
-        '<div class="text ja">' + escapeHtml(lastResultJa) + '</div>' +
-        '<div class="lang">' + escapeHtml(dict.lang_en) + '</div>' +
-        '<div class="text en">' + escapeHtml(lastResultEn) + '</div>';
+      pushResultHistory(lastResultJa, lastResultEn, s.lastResult.timestamp || Date.now());
+      renderResultHistory();
     }
+  }
+
+  var resultHistory = [];
+  var MAX_RESULT_HISTORY = 3;
+  function pushResultHistory(ja, en, ts) {
+    resultHistory.unshift({ ja: ja, en: en, ts: ts });
+    if (resultHistory.length > MAX_RESULT_HISTORY) resultHistory.length = MAX_RESULT_HISTORY;
+  }
+  function renderResultHistory() {
+    if (resultHistory.length === 0) {
+      resultPanel.innerHTML = '<div class="empty">' + escapeHtml(t('waiting')) + '</div>';
+      return;
+    }
+    var dict = i18n[currentLang] || i18n.en;
+    var html = '';
+    for (var i = 0; i < resultHistory.length; i++) {
+      var r = resultHistory[i];
+      var d = new Date(r.ts);
+      var hh = String(d.getHours()).padStart(2, '0');
+      var mm = String(d.getMinutes()).padStart(2, '0');
+      var ss = String(d.getSeconds()).padStart(2, '0');
+      html += '<div class="result-entry' + (i === 0 ? ' latest' : '') + '">'
+        + '<div class="ts">' + hh + ':' + mm + ':' + ss + '</div>'
+        + '<div class="lang">' + escapeHtml(dict.lang_ja) + '</div>'
+        + '<div class="text ja">' + escapeHtml(r.ja) + '</div>'
+        + '<div class="lang">' + escapeHtml(dict.lang_en) + '</div>'
+        + '<div class="text en">' + escapeHtml(r.en) + '</div>'
+        + '</div>';
+    }
+    resultPanel.innerHTML = html;
   }
 
   function setIndicator(id, on) {
@@ -1083,8 +1271,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   // --- Audio capture ---
   window.captureAudio = function() {
     var btn = document.getElementById('capture-btn');
+    btn.dataset.busy = '1';
     btn.disabled = true;
-    btn.textContent = 'Recording...';
+    btn.textContent = t('capture_recording');
     fetch('/api/capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1099,12 +1288,16 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       a.download = 'vban-capture.wav';
       a.click();
       URL.revokeObjectURL(url);
-      btn.textContent = 'Capture 5s WAV';
+      // Release the busy flag last so any status tick that fires mid-restore
+      // still sees us as "in capture" and skips the disabled override.
+      btn.textContent = t('capture_btn');
       btn.disabled = false;
+      delete btn.dataset.busy;
     }).catch(function(e) {
-      showToast('Capture failed: ' + e.message, true);
-      btn.textContent = 'Capture 5s WAV';
+      showToast(t('capture_failed', e.message), true);
+      btn.textContent = t('capture_btn');
       btn.disabled = false;
+      delete btn.dataset.busy;
     });
   };
 
@@ -1113,7 +1306,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     fetch('/api/config')
       .then(function(r) { return r.json(); })
       .then(function(c) { fillForm(c); })
-      .catch(function(e) { showToast('Failed to load config: ' + e.message, true); });
+      .catch(function(e) { showToast(t('load_config_failed', e.message), true); });
   }
 
   function fillForm(c) {
@@ -1148,6 +1341,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     document.getElementById('cfg-audio-adaptive-margin').value = marginVal;
     document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(marginVal);
     document.getElementById('cfg-ui-vad-debug').checked = !!(c.ui && c.ui.show_vad_debug);
+    syncAdaptiveMarginEnabled();
+    syncCcWarning();
 
     // Apply UI language override from config (empty = auto-detect from system)
     var overrideLang = (c.ui && c.ui.language) || '';
@@ -1254,18 +1449,15 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   }
 
   function getSaveMessage(newCfg) {
-    if (!savedConfig) return 'Saved. Restart to apply.';
-    var obsOnly = true;
+    if (!savedConfig) return t('saved_restart');
     var obsChanged = false;
     var restartChanged = false;
-    // Check OBS section
     var obsKeys = ['host', 'port', 'password', 'source_ja', 'source_en', 'closed_caption', 'cc_language'];
     for (var i = 0; i < obsKeys.length; i++) {
       if (String(newCfg.obs[obsKeys[i]]) !== String(savedConfig.obs[obsKeys[i]])) {
         obsChanged = true;
       }
     }
-    // Check restart-requiring sections
     if (String(newCfg.vban.port) !== String(savedConfig.vban.port) ||
         newCfg.vban.stream_name !== savedConfig.vban.stream_name) restartChanged = true;
     var wKeys = ['binary_variant', 'model_name'];
@@ -1278,18 +1470,60 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
         String(newCfg.vad.min_speech_ms) !== String(savedConfig.vad.min_speech_ms) ||
         String(newCfg.vad.max_speech_ms) !== String(savedConfig.vad.max_speech_ms)) restartChanged = true;
 
-    if (restartChanged && obsChanged) return 'Saved. Restart to apply. OBS: use Reconnect.';
-    if (restartChanged) return 'Saved. Restart to apply.';
-    if (obsChanged) return 'Saved. Use Reconnect to apply OBS changes.';
-    return 'Saved.';
+    if (restartChanged && obsChanged) return t('saved_restart_obs');
+    if (restartChanged) return t('saved_restart');
+    if (obsChanged) return t('saved_obs');
+    return t('saved');
+  }
+
+  /**
+   * Pre-flight validation. Returns {ok: bool, error?: string} so the user
+   * sees a fast, localized message instead of the server's generic 400.
+   */
+  function validateForm(cfg) {
+    function isInt(v) { return Number.isFinite(v) && Math.floor(v) === v; }
+    if (!isInt(cfg.vban.port) || cfg.vban.port < 1 || cfg.vban.port > 65535) {
+      return { ok: false, error: t('val_invalid_port') };
+    }
+    if (!isInt(cfg.obs.port) || cfg.obs.port < 1 || cfg.obs.port > 65535) {
+      return { ok: false, error: t('val_invalid_port') };
+    }
+    if (!Number.isFinite(cfg.vad.threshold) || cfg.vad.threshold < 0 || cfg.vad.threshold > 1) {
+      return { ok: false, error: t('val_invalid_threshold') };
+    }
+    if (!isInt(cfg.vad.min_speech_ms) || cfg.vad.min_speech_ms < 0) {
+      return { ok: false, error: t('val_invalid_int', 'Min Speech (ms)') };
+    }
+    if (!isInt(cfg.vad.max_speech_ms) || cfg.vad.max_speech_ms < 100) {
+      return { ok: false, error: t('val_invalid_int', 'Max Speech (ms)') };
+    }
+    if (!Number.isFinite(cfg.subtitle.clear_delay) || cfg.subtitle.clear_delay < 0) {
+      return { ok: false, error: t('val_invalid_number', 'Clear Delay') };
+    }
+    if (!isInt(cfg.subtitle.chars_per_line) || cfg.subtitle.chars_per_line < 0) {
+      return { ok: false, error: t('val_invalid_int', 'Chars per Line') };
+    }
+    if (!Number.isFinite(cfg.audio.rms_gate_db)) {
+      return { ok: false, error: t('val_invalid_number', 'RMS Gate') };
+    }
+    if (!Number.isFinite(cfg.audio.adaptive_gate_margin_db)) {
+      return { ok: false, error: t('val_invalid_number', 'Adaptive Margin') };
+    }
+    return { ok: true };
   }
 
   document.getElementById('config-form').addEventListener('submit', function(e) {
     e.preventDefault();
     var btn = document.getElementById('save-btn');
-    btn.disabled = true;
     var formData = readForm();
 
+    var v = validateForm(formData);
+    if (!v.ok) {
+      showToast(v.error, true);
+      return;
+    }
+
+    btn.disabled = true;
     fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1300,9 +1534,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       return r.json();
     })
     .then(function() {
-      var msg = getSaveMessage(formData);
+      var ccNoSource = formData.obs.closed_caption && !formData.obs.source_ja && !formData.obs.source_en;
+      var msg = ccNoSource ? t('val_cc_no_source_save') : getSaveMessage(formData);
       savedConfig = JSON.parse(JSON.stringify(formData));
-      showToast(msg);
+      showToast(msg, ccNoSource);
     })
     .catch(function(e) {
       showToast(e.message, true);
@@ -1314,12 +1549,12 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   document.getElementById('reload-btn').addEventListener('click', function() {
     loadConfig();
-    showToast('Config reloaded from server.');
+    showToast(t('config_reloaded'));
   });
 
   document.getElementById('refresh-sources-btn').addEventListener('click', function() {
     refreshSources();
-    showToast('Sources refreshed.');
+    showToast(t('sources_refreshed'));
   });
 
   document.getElementById('reconnect-obs-btn').addEventListener('click', function() {
@@ -1329,13 +1564,13 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.connected) {
-          showToast('OBS connected.');
+          showToast(t('obs_connected_toast'));
           refreshSources();
         } else {
-          showToast('OBS connection failed: ' + (d.error || 'unknown'), true);
+          showToast(t('obs_connect_failed', d.error || 'unknown'), true);
         }
       })
-      .catch(function(e) { showToast('OBS reconnect failed: ' + e.message, true); })
+      .catch(function(e) { showToast(t('obs_reconnect_failed', e.message), true); })
       .finally(function() { btn.disabled = false; });
   });
 
@@ -1350,8 +1585,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
           var opt = document.createElement('option');
           opt.value = v.id;
           var label = v.label;
-          if (v.id === d.recommended) label += ' (recommended)';
-          if (d.installed[v.id]) label += ' [installed]';
+          if (v.id === d.recommended) label += ' (' + t('tag_recommended') + ')';
+          if (d.installed[v.id]) label += ' [' + t('tag_installed') + ']';
           opt.textContent = label;
           sel.appendChild(opt);
         });
@@ -1374,7 +1609,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
           var opt = document.createElement('option');
           opt.value = m.id;
           var label = m.label;
-          if (d.installed[m.id]) label += ' [installed]';
+          if (d.installed[m.id]) label += ' [' + t('tag_installed') + ']';
           opt.textContent = label;
           sel.appendChild(opt);
         });
@@ -1390,10 +1625,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var sel = document.getElementById('cfg-whisper-variant');
     var btn = document.getElementById('download-binary-btn');
     if (installed && installed[sel.value]) {
-      btn.textContent = 'Installed';
+      btn.textContent = t('btn_installed');
       btn.disabled = true;
     } else {
-      btn.textContent = 'Download';
+      btn.textContent = t('btn_download');
       btn.disabled = false;
     }
   }
@@ -1402,10 +1637,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var sel = document.getElementById('cfg-whisper-model-select');
     var btn = document.getElementById('download-model-btn');
     if (installed && installed[sel.value]) {
-      btn.textContent = 'Installed';
+      btn.textContent = t('btn_installed');
       btn.disabled = true;
     } else {
-      btn.textContent = 'Download';
+      btn.textContent = t('btn_download');
       btn.disabled = false;
     }
   }
@@ -1427,7 +1662,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     .then(function(d) { addProgressBar(d.id, 'Binary: ' + variant); })
     .catch(function(e) {
       btn.disabled = false;
-      showToast('Download failed: ' + e.message, true);
+      showToast(t('download_failed', e.message), true);
     });
   });
 
@@ -1448,7 +1683,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     .then(function(d) { addProgressBar(d.id, 'Model: ' + model); })
     .catch(function(e) {
       btn.disabled = false;
-      showToast('Download failed: ' + e.message, true);
+      showToast(t('download_failed', e.message), true);
     });
   });
 
@@ -1457,15 +1692,26 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var container = document.getElementById('download-progress-container');
     var el = document.createElement('div');
     el.id = 'dl-' + id;
+    var cancelTitle = t('cancel_download');
     el.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">'
-      + '<div style="flex:1;font-size:11px;color:#9999bb;" class="dl-label">' + escapeHtml(title) + '</div>'
-      + '<span style="font-size:12px;color:#dc2626;cursor:pointer;line-height:1;" onclick="cancelDownload(\'' + id + '\')" title="Cancel download">&times;</span>'
+      + '<div style="flex:1;font-size:11px;color:#b8b8d4;" class="dl-label">' + escapeHtml(title) + '</div>'
+      + '<span class="dl-cancel" role="button" tabindex="0" aria-label="' + escapeHtml(cancelTitle) + '"'
+      + ' style="font-size:14px;color:#f87171;cursor:pointer;line-height:1;padding:2px 6px;" title="' + escapeHtml(cancelTitle) + '">&times;</span>'
       + '</div>'
       + '<div style="background:#0f1629;border-radius:4px;height:6px;overflow:hidden;">'
       + '<div class="dl-bar" style="height:100%;background:#6366f1;width:0%;transition:width 0.3s;"></div>'
       + '</div>'
-      + '<div style="font-size:10px;color:#666;margin-top:2px;" class="dl-detail"></div>';
+      + '<div style="font-size:10px;color:#9e9ec0;margin-top:2px;" class="dl-detail"></div>';
     container.appendChild(el);
+    var cancelEl = el.querySelector('.dl-cancel');
+    function doCancel() { window.cancelDownload(id); }
+    cancelEl.addEventListener('click', doCancel);
+    cancelEl.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        doCancel();
+      }
+    });
   }
 
   window.cancelDownload = function(id) {
@@ -1497,16 +1743,16 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       var totalMb = d.bytesTotal > 0 ? (d.bytesTotal / 1048576).toFixed(1) : '?';
       detail.textContent = mb + ' / ' + totalMb + ' MB (' + d.percent + '%)';
     } else if (d.phase === 'extracting') {
-      label.textContent = 'Extracting...';
+      label.textContent = t('extracting');
       bar.style.width = '100%';
       detail.textContent = '';
     } else if (d.phase === 'verifying') {
-      label.textContent = 'Verifying checksum...';
+      label.textContent = t('verifying');
       bar.style.width = '100%';
       detail.textContent = '';
     } else if (d.phase === 'done') {
       removeProgressBar(d.id);
-      showToast('Download complete! Restart to apply.');
+      showToast(t('download_complete'));
       // Refresh whisperConfig from server (download auto-saves config)
       fetch('/api/config').then(function(r) { return r.json(); }).then(function(c) {
         whisperConfig = {
@@ -1520,9 +1766,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     } else if (d.phase === 'error') {
       removeProgressBar(d.id);
       if (d.label && d.label.indexOf('aborted') !== -1) {
-        showToast('Download cancelled.');
+        showToast(t('download_cancelled'));
       } else {
-        showToast('Download error: ' + d.label, true);
+        showToast(t('download_error', d.label), true);
       }
       loadWhisperSetup();
     }
@@ -1538,6 +1784,41 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   document.getElementById('cfg-audio-adaptive-margin').addEventListener('input', function() {
     document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(this.value);
+  });
+
+  function syncAdaptiveMarginEnabled() {
+    var enabled = document.getElementById('cfg-audio-adaptive-gate').checked;
+    var margin = document.getElementById('cfg-audio-adaptive-margin');
+    margin.disabled = !enabled;
+    var label = document.querySelector('label[for="cfg-audio-adaptive-margin"]');
+    if (label) label.style.opacity = enabled ? '1' : '0.5';
+    var marginValue = document.getElementById('cfg-audio-adaptive-margin-value');
+    if (marginValue) marginValue.style.opacity = enabled ? '1' : '0.5';
+  }
+  document.getElementById('cfg-audio-adaptive-gate').addEventListener('change', syncAdaptiveMarginEnabled);
+
+  function syncCcWarning() {
+    var ccOn = document.getElementById('cfg-obs-cc').checked;
+    var noSource = !document.getElementById('cfg-obs-source-ja').value && !document.getElementById('cfg-obs-source-en').value;
+    var row = document.getElementById('cfg-cc-warning-row');
+    if (row) row.style.display = (ccOn && noSource) ? '' : 'none';
+  }
+  document.getElementById('cfg-obs-cc').addEventListener('change', syncCcWarning);
+  document.getElementById('cfg-obs-source-ja').addEventListener('change', syncCcWarning);
+  document.getElementById('cfg-obs-source-en').addEventListener('change', syncCcWarning);
+
+  // Whisper unreachable hint → expand Whisper section and scroll into view
+  document.getElementById('whisper-hint').addEventListener('click', function(ev) {
+    ev.preventDefault();
+    var configWrapper = document.getElementById('config-wrapper');
+    if (configWrapper.classList.contains('collapsed')) {
+      document.getElementById('config-toggle').click();
+    }
+    var whisperSec = document.querySelector('.config-section[data-section="whisper"]');
+    if (whisperSec && whisperSec.classList.contains('collapsed')) {
+      whisperSec.querySelector('h3').click();
+    }
+    if (whisperSec) whisperSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   document.getElementById('cfg-whisper-variant').addEventListener('change', function() {
