@@ -49,28 +49,28 @@ const HF_ANIME_WHISPER = 'https://huggingface.co/Aratako/anime-whisper-ggml/reso
 export const BINARY_VARIANTS: BinaryVariant[] = [
   {
     id: 'cublas-12',
-    label: 'CUDA 12.x (GPU)',
+    label: 'Windows (CUDA 12.x GPU)',
     platform: 'win32',
     zipAsset: 'whisper-cublas-12.4.0-bin-x64.zip',
     serverExe: 'Release/whisper-server.exe',
   },
   {
     id: 'cublas-11',
-    label: 'CUDA 11.x (GPU)',
+    label: 'Windows (CUDA 11.x GPU)',
     platform: 'win32',
     zipAsset: 'whisper-cublas-11.8.0-bin-x64.zip',
     serverExe: 'Release/whisper-server.exe',
   },
   {
     id: 'cpu',
-    label: 'CPU only',
+    label: 'Windows (CPU only)',
     platform: 'win32',
     zipAsset: 'whisper-bin-x64.zip',
     serverExe: 'Release/whisper-server.exe',
   },
   {
     id: 'homebrew',
-    label: 'Homebrew (Apple Silicon / Intel)',
+    label: 'macOS (Homebrew · Apple Silicon / Intel)',
     platform: 'darwin',
     zipAsset: '',
     serverExe: 'whisper-server',
@@ -217,8 +217,23 @@ export function migrateLegacyDataIfNeeded(): void {
   if (process.env.VBAN_WHISPER_DIR) return;
   const targetDir = path.join(getJimakuDataRoot(), 'whisper');
   if (fs.existsSync(targetDir)) return;
-  const legacy = path.join(os.homedir(), '.jimaku-translator', 'whisper');
-  if (!fs.existsSync(legacy)) return;
+
+  const home = os.homedir();
+  const candidates: string[] = [
+    path.join(home, '.jimaku-translator', 'whisper'),
+  ];
+  if (process.platform === 'darwin') {
+    // Electron's product-name lowercased fallback used by older builds
+    candidates.push(path.join(home, 'Library', 'Application Support', 'jimaku-translator', 'whisper'));
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
+    candidates.push(path.join(appData, 'jimaku-translator', 'whisper'));
+  }
+
+  const legacy = candidates.find((p) => fs.existsSync(p));
+  if (!legacy) return;
+
   try {
     fs.mkdirSync(path.dirname(targetDir), { recursive: true });
   } catch { /* ignore */ }
@@ -226,9 +241,19 @@ export function migrateLegacyDataIfNeeded(): void {
     fs.symlinkSync(legacy, targetDir, 'dir');
     return;
   } catch { /* fall through to copy */ }
+
+  // Stage into a sibling temp dir then rename atomically — a partial cpSync
+  // would otherwise leave a half-populated targetDir that future startups
+  // would treat as "already migrated", silently corrupting the install.
+  const stagingDir = `${targetDir}.migrating-${process.pid}`;
   try {
-    fs.cpSync(legacy, targetDir, { recursive: true });
-  } catch { /* ignore — user can re-download */ }
+    fs.cpSync(legacy, stagingDir, { recursive: true });
+    fs.renameSync(stagingDir, targetDir);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[migrate] failed to migrate ${legacy} → ${targetDir}: ${msg}. User will need to re-download models.`);
+    try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
 }
 
 // --- Variant / model availability ---
