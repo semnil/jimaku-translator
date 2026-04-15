@@ -183,6 +183,7 @@ function parseConfigInput(data: unknown): Config | null {
   if (typeof whisper.server !== 'string') return null;
   if (typeof whisper.binary !== 'string' || typeof whisper.model !== 'string') return null;
   if (typeof whisper.binary_variant !== 'string' || typeof whisper.model_name !== 'string') return null;
+  if (whisper.threads !== undefined && typeof whisper.threads !== 'number') return null;
   if (typeof subtitle.clear_delay !== 'number' || typeof subtitle.chars_per_line !== 'number') return null;
   if (typeof vad.threshold !== 'number') return null;
   if (typeof vad.min_speech_ms !== 'number' || typeof vad.max_speech_ms !== 'number') return null;
@@ -200,7 +201,7 @@ function escapeTomlString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 }
 
-function configToToml(config: Config): string {
+export function configToToml(config: Config): string {
   const e = escapeTomlString;
   const lines: string[] = [];
 
@@ -225,6 +226,9 @@ function configToToml(config: Config): string {
   lines.push(`model = "${e(config.whisper.model)}"`);
   lines.push(`binary_variant = "${e(config.whisper.binary_variant)}"`);
   lines.push(`model_name = "${e(config.whisper.model_name)}"`);
+  if (config.whisper.threads !== undefined) {
+    lines.push(`threads = ${config.whisper.threads}`);
+  }
   lines.push('');
 
   lines.push('[subtitle]');

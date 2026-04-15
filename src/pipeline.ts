@@ -9,7 +9,7 @@ import { downmixToMono, resampleTo16k } from './audio/resample.js';
 import { computeRms, dbfsToLinear, linearToDbfs, normalizeToTarget, NoiseFloorTracker } from './audio/level.js';
 import { SileroVad, type SpeechSegment } from './audio/vad.js';
 import { WhisperClient } from './recognition/whisper-client.js';
-import { WhisperProcess } from './recognition/whisper-process.js';
+import { WhisperProcess, resolveThreadsDefault } from './recognition/whisper-process.js';
 import { SubtitleManager } from './subtitle/manager.js';
 import { MODEL_REGISTRY } from './recognition/whisper-setup.js';
 
@@ -571,12 +571,15 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       this.whisper = new WhisperClient({ server: whisperServer });
       this.log(`[Whisper] Auto-assigned port ${autoPort}`);
 
+      const threads = this.config.whisper.threads ?? resolveThreadsDefault(this.config.whisper.binary_variant);
       this.whisperProc = new WhisperProcess({
         binary: this.config.whisper.binary,
         model: this.config.whisper.model,
         host: '127.0.0.1',
         port: autoPort,
+        threads,
       });
+      this.log(`[Whisper] Using ${threads} thread(s)`);
       this.whisperProc.on('log', (msg) => this.log(msg));
       this.whisperProc.on('error', (err) => this.log(`[Whisper] Process error: ${err.message}`));
       this.whisperProc.on('exit', () => {

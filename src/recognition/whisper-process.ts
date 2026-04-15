@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -11,6 +12,30 @@ export interface WhisperProcessOptions {
   host?: string;
   /** Port to bind. Extracted from server URL. */
   port: number;
+  /** Thread count passed via --threads. Omit to let whisper-server decide. */
+  threads?: number;
+}
+
+/**
+ * Decide a reasonable default for `--threads` based on platform and the
+ * currently selected binary variant. GPU-accelerated builds only need a few
+ * CPU threads for pre/post-processing; CPU-only builds benefit from more
+ * threads but we leave half the cores free for the rest of the pipeline.
+ */
+export function resolveThreadsDefault(variant: string): number {
+  // macOS (Apple Silicon or Intel + Metal via Homebrew) — Metal offloads the
+  // heavy math so a small thread count is optimal.
+  if (process.platform === 'darwin') return 4;
+
+  // Windows / Linux with GPU-accelerated variant — same reasoning as Metal.
+  const v = variant.toLowerCase();
+  if (v.includes('cublas') || v.includes('cuda') || v.includes('vulkan')) {
+    return 4;
+  }
+
+  // CPU-only: use half the logical cores, minimum 1.
+  const cores = os.cpus()?.length ?? 2;
+  return Math.max(1, Math.floor(cores / 2));
 }
 
 export interface WhisperProcessEvents {
@@ -22,7 +47,7 @@ export interface WhisperProcessEvents {
 
 export class WhisperProcess extends EventEmitter<WhisperProcessEvents> {
   private proc: ChildProcess | null = null;
-  private readonly opts: Required<WhisperProcessOptions>;
+  private readonly opts: Required<Omit<WhisperProcessOptions, 'threads'>> & { threads?: number };
   private stopping = false;
 
   constructor(opts: WhisperProcessOptions) {
@@ -40,6 +65,9 @@ export class WhisperProcess extends EventEmitter<WhisperProcessEvents> {
       '--host', this.opts.host,
       '--port', String(this.opts.port),
     ];
+    if (this.opts.threads !== undefined) {
+      args.push('--threads', String(this.opts.threads));
+    }
 
     this.emit('log', `[Whisper] Starting: ${this.opts.binary} ${args.join(' ')}`);
 

@@ -31,6 +31,8 @@ export interface Config {
     binary_variant: string;
     /** Selection key for managed model (e.g. 'large-v3-turbo-q5_0'). */
     model_name: string;
+    /** Thread count passed to whisper-server via --threads. Undefined = auto. */
+    threads?: number;
   };
   subtitle: {
     clear_delay: number;
@@ -74,7 +76,7 @@ const DEFAULTS: Config = {
     closed_caption: false,
     cc_language: 'en',
   },
-  whisper: { server: 'http://127.0.0.1:8080', binary: '', model: '', binary_variant: '', model_name: '' },
+  whisper: { server: 'http://127.0.0.1:8080', binary: '', model: '', binary_variant: '', model_name: '', threads: undefined },
   subtitle: { clear_delay: 6.0, chars_per_line: 0 },
   vad: { threshold: 0.5, min_speech_ms: 500, max_speech_ms: 10000 },
   audio: {
@@ -152,6 +154,16 @@ export function validateConfig(c: Config): void {
       new URL(c.whisper.server);
     } catch {
       errors.push(`whisper.server must be a valid URL, got "${c.whisper.server}"`);
+    }
+  }
+  if (c.whisper.threads !== undefined) {
+    if (
+      typeof c.whisper.threads !== 'number' ||
+      !Number.isFinite(c.whisper.threads) ||
+      !Number.isInteger(c.whisper.threads) ||
+      c.whisper.threads < 1
+    ) {
+      errors.push(`whisper.threads must be an integer >= 1, got ${c.whisper.threads}`);
     }
   }
   if (c.vad.threshold < 0 || c.vad.threshold > 1) {

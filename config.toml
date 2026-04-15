@@ -13,6 +13,7 @@ source_en = ""
 server = "http://127.0.0.1:8080"
 binary = ""                 # path to whisper-server binary (empty = manual management)
 model = ""                  # path to GGML model file (required when binary is set)
+# threads = 4               # whisper-server --threads (省略時はプラットフォーム/GPU 判定で自動決定)
 
 [subtitle]
 clear_delay = 6.0
