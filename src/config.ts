@@ -46,10 +46,20 @@ export interface Config {
     rms_gate_db: number;
     /** Target RMS level for detected speech segments in dBFS. 0 = disabled. */
     normalize_target_dbfs: number;
+    /** Enable adaptive noise-floor tracking that raises the gate above ambient noise. */
+    adaptive_gate_enabled: boolean;
+    /** Margin in dB added above the tracked noise floor when adaptive gate is on. */
+    adaptive_gate_margin_db: number;
+    /** Sliding window length in seconds for noise-floor sample history. */
+    adaptive_gate_window_sec: number;
+    /** Absolute ceiling for the adaptive gate in dBFS. Protects against runaway feedback. */
+    adaptive_gate_max_db: number;
   };
   ui: {
     /** UI language override. Empty = auto-detect from system. */
     language: '' | 'en' | 'ja';
+    /** Show VAD debug overlays (prob line, threshold, diag text) on the audio plot. */
+    show_vad_debug: boolean;
   };
 }
 
@@ -67,8 +77,15 @@ const DEFAULTS: Config = {
   whisper: { server: 'http://127.0.0.1:8080', binary: '', model: '', binary_variant: '', model_name: '' },
   subtitle: { clear_delay: 6.0, chars_per_line: 0 },
   vad: { threshold: 0.5, min_speech_ms: 500, max_speech_ms: 10000 },
-  audio: { rms_gate_db: -60, normalize_target_dbfs: -6 },
-  ui: { language: '' },
+  audio: {
+    rms_gate_db: -60,
+    normalize_target_dbfs: -6,
+    adaptive_gate_enabled: false,
+    adaptive_gate_margin_db: 6,
+    adaptive_gate_window_sec: 10,
+    adaptive_gate_max_db: -30,
+  },
+  ui: { language: '', show_vad_debug: false },
 };
 
 export function getLocalConfigPath(configPath: string): string {
@@ -157,6 +174,18 @@ export function validateConfig(c: Config): void {
   }
   if (c.audio.normalize_target_dbfs > 0) {
     errors.push(`audio.normalize_target_dbfs must be <= 0, got ${c.audio.normalize_target_dbfs}`);
+  }
+  if (c.audio.adaptive_gate_margin_db < 0) {
+    errors.push(`audio.adaptive_gate_margin_db must be >= 0, got ${c.audio.adaptive_gate_margin_db}`);
+  }
+  if (c.audio.adaptive_gate_window_sec <= 0) {
+    errors.push(`audio.adaptive_gate_window_sec must be > 0, got ${c.audio.adaptive_gate_window_sec}`);
+  }
+  if (c.audio.adaptive_gate_max_db > -10) {
+    errors.push(`audio.adaptive_gate_max_db must be <= -10, got ${c.audio.adaptive_gate_max_db}`);
+  }
+  if (c.audio.adaptive_gate_max_db < c.audio.rms_gate_db) {
+    errors.push(`audio.adaptive_gate_max_db (${c.audio.adaptive_gate_max_db}) must be >= rms_gate_db (${c.audio.rms_gate_db})`);
   }
   if (c.ui.language !== '' && c.ui.language !== 'en' && c.ui.language !== 'ja') {
     errors.push(`ui.language must be "", "en", or "ja", got "${c.ui.language}"`);

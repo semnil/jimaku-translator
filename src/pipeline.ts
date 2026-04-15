@@ -5,7 +5,7 @@ import { type Config, loadConfig } from './config.js';
 import { VbanReceiver, type VbanAudioEvent } from './vban/receiver.js';
 import { ObsClient } from './obs/client.js';
 import { downmixToMono, resampleTo16k } from './audio/resample.js';
-import { computeRms, dbfsToLinear, normalizeToTarget } from './audio/level.js';
+import { computeRms, dbfsToLinear, linearToDbfs, normalizeToTarget, NoiseFloorTracker } from './audio/level.js';
 import { SileroVad, type SpeechSegment } from './audio/vad.js';
 import { WhisperClient } from './recognition/whisper-client.js';
 import { WhisperProcess } from './recognition/whisper-process.js';
@@ -39,6 +39,33 @@ export interface PipelineStatus {
     en: string;
     timestamp: number;
   } | null;
+  audio: {
+    /** Effective RMS gate in dBFS (max of static + adaptive, clamped by ceiling). */
+    effectiveGateDb: number;
+    /** Static RMS gate in dBFS (config value). */
+    staticGateDb: number;
+    /** Ceiling for the adaptive gate in dBFS. */
+    maxGateDb: number;
+    /** Instantaneous RMS in dBFS from the latest frame (-Infinity when silent). */
+    rmsDb: number;
+    /** True when VAD is currently inside an active speech segment. */
+    inSpeech: boolean;
+    /** True when the latest frame's RMS passed the effective gate. */
+    gatePass: boolean;
+    /** Epoch ms timestamp when audio was last dispatched to Whisper (0 = never). */
+    lastWhisperSendAt: number;
+    /** Peak VAD speech probability (0-1) since last status tick. */
+    vadProb: number;
+    /** Configured VAD speech threshold (0-1). */
+    vadThreshold: number;
+    /** Milliseconds of continuous non-speech since last detected speech chunk. */
+    vadSilenceSinceLastSpeechMs: number;
+    /** Number of pending feed() calls queued on the VAD. */
+    vadQueueDepth: number;
+  };
+  ui: {
+    showVadDebug: boolean;
+  };
 }
 
 export interface PipelineEvents {
@@ -87,6 +114,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   private logBuffer: string[] = [];
   private rmsSumSquares = 0;
   private rmsSampleCount = 0;
+  private noiseFloor: NoiseFloorTracker | null = null;
+  private lastFrameRmsLinear = 0;
+  private lastFrameGatePass = false;
+  private lastWhisperSendAt = 0;
 
   // Audio capture for WAV export
   private captureBuffer: Int16Array[] | null = null;
@@ -159,7 +190,18 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   }
 
   updateAudioConfig(audio: Config['audio']): void {
+    const windowChanged = audio.adaptive_gate_window_sec !== this.config.audio.adaptive_gate_window_sec;
     this.config.audio = { ...audio };
+    if (windowChanged && this.noiseFloor) {
+      this.noiseFloor = new NoiseFloorTracker(
+        Math.max(10, Math.ceil(audio.adaptive_gate_window_sec * 100)),
+        0.5,
+      );
+    }
+  }
+
+  updateUiConfig(ui: Config['ui']): void {
+    this.config.ui = { ...ui };
   }
 
   updateVbanConfig(vban: Config['vban']): void {
@@ -237,7 +279,38 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         queueLength: this.inferQueue.length,
       },
       lastResult: this.lastResult,
+      audio: {
+        effectiveGateDb: this.computeEffectiveGateDb(),
+        staticGateDb: this.config.audio.rms_gate_db,
+        maxGateDb: this.config.audio.adaptive_gate_max_db,
+        rmsDb: this.lastFrameRmsLinear > 0 ? linearToDbfs(this.lastFrameRmsLinear) : -Infinity,
+        inSpeech: this.vbanListening ? (this.vad?.inSpeech ?? false) : false,
+        gatePass: this.vbanListening ? this.lastFrameGatePass : false,
+        lastWhisperSendAt: this.lastWhisperSendAt,
+        vadProb: this.vbanListening && this.vad ? this.vad.takeMaxProb() : 0,
+        vadThreshold: this.config.vad.threshold,
+        vadSilenceSinceLastSpeechMs: this.vad
+          ? (this.vad.silenceSinceLastSpeechSamples / 16000) * 1000
+          : 0,
+        vadQueueDepth: this.vad?.queueDepth ?? 0,
+      },
+      ui: {
+        showVadDebug: !!this.config.ui.show_vad_debug,
+      },
     };
+  }
+
+  private computeEffectiveGateDb(): number {
+    const staticDb = this.config.audio.rms_gate_db;
+    const maxDb = this.config.audio.adaptive_gate_max_db;
+    if (!this.config.audio.adaptive_gate_enabled || !this.noiseFloor) {
+      return Math.min(staticDb, maxDb);
+    }
+    const floor = this.noiseFloor.estimate();
+    if (floor === null) return Math.min(staticDb, maxDb);
+    const adaptiveDb = linearToDbfs(floor) + this.config.audio.adaptive_gate_margin_db;
+    const best = Number.isFinite(adaptiveDb) && adaptiveDb > staticDb ? adaptiveDb : staticDb;
+    return Math.min(best, maxDb);
   }
 
   async start(): Promise<void> {
@@ -265,6 +338,16 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       ccLanguage: this.config.obs.cc_language,
     });
 
+    // Mirror the subtitle display state to lastResult so the GUI reflects
+    // what's actually on-screen in OBS (gated by clearDelay), not every
+    // Whisper output (which can burst faster than clearDelay when q >= 1).
+    this.subtitle.on('displayed', ({ ja, en }) => {
+      this.lastResult = { ja, en, timestamp: Date.now() };
+    });
+    this.subtitle.on('cleared', () => {
+      this.lastResult = null;
+    });
+
     this.vad = new SileroVad({
       modelPath,
       threshold: this.config.vad.threshold,
@@ -276,6 +359,14 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       port: this.config.vban.port,
       streamName: this.config.vban.stream_name,
     });
+
+    // VBAN packets arrive ~100x/sec; size the noise-floor history to roughly
+    // window_sec seconds of non-speech samples. Median (50th percentile) is
+    // robust against the occasional gate-passing transient noise.
+    this.noiseFloor = new NoiseFloorTracker(
+      Math.max(10, Math.ceil(this.config.audio.adaptive_gate_window_sec * 100)),
+      0.5,
+    );
 
     this.vad.on('speech', (segment: SpeechSegment) => {
       this.log(`[VAD] Speech detected: ${segment.durationMs.toFixed(0)}ms, ${segment.samples.length} samples`);
@@ -338,12 +429,42 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
           }
         }
 
-        // RMS gate: skip VAD for audio below threshold to save compute
-        // and prevent false positives on ambient noise. Freezes VAD state
-        // and pre-speech buffer until audio rises above the gate.
-        const gateThreshold = dbfsToLinear(this.config.audio.rms_gate_db);
+        // RMS gate: skip VAD for audio below threshold to save compute and
+        // prevent false positives on ambient noise. Bypassed once VAD is in
+        // an active speech segment so brief intra-utterance dips (commas,
+        // breaths) don't punch holes in the audio handed to Whisper.
         const rms = computeRms(resampled);
-        if (rms >= gateThreshold) {
+        const inSpeech = this.vad.inSpeech;
+        this.lastFrameRmsLinear = rms;
+
+        const maxGate = dbfsToLinear(this.config.audio.adaptive_gate_max_db);
+        // Track ambient noise floor only outside speech AND only while below
+        // the ceiling — otherwise a gate that climbs past real signal would
+        // block all audio, starve VAD, and treat the signal as "noise",
+        // creating a runaway feedback loop.
+        if (!inSpeech && this.noiseFloor && rms < maxGate) {
+          this.noiseFloor.add(rms);
+        }
+
+        const staticGate = dbfsToLinear(this.config.audio.rms_gate_db);
+        let effectiveGate = staticGate;
+        if (this.config.audio.adaptive_gate_enabled && this.noiseFloor) {
+          const floor = this.noiseFloor.estimate();
+          if (floor !== null) {
+            const adaptive = floor * dbfsToLinear(this.config.audio.adaptive_gate_margin_db);
+            if (adaptive > effectiveGate) effectiveGate = adaptive;
+          }
+        }
+        if (effectiveGate > maxGate) effectiveGate = maxGate;
+
+        const gatePass = rms >= effectiveGate;
+        this.lastFrameGatePass = gatePass;
+
+        // Use the effective gate as VAD's continuation floor so sustained
+        // vowels (where Silero's prob collapses) still count as ongoing speech.
+        this.vad.setContinuationFloor(effectiveGate);
+
+        if (inSpeech || gatePass) {
           this.vad.feed(resampled).catch((err) => {
             vadFeedErrors++;
             if (vadFeedErrors <= 3) {
@@ -436,7 +557,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       this.rmsSumSquares = 0;
       this.rmsSampleCount = 0;
       this.lastLogTime = Date.now();
-    }, 1000);
+    }, 300);
   }
 
   async stop(): Promise<void> {
@@ -445,6 +566,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       this.statusInterval = null;
     }
     this.vad?.removeAllListeners();
+    this.subtitle?.removeAllListeners();
     this.receiver?.removeAllListeners();
     this.obs?.removeAllListeners();
     this.receiver?.stop();
@@ -469,6 +591,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
 
     this.inferring = true;
     const start = Date.now();
+    this.lastWhisperSendAt = start;
 
     try {
       // Determine canTranslate from model_name, or by matching the model filename
@@ -483,7 +606,6 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       if (result.ja || result.en) {
         this.log(`[Whisper] ${elapsed}ms | JA: ${result.ja}`);
         this.log(`[Whisper]          | EN: ${result.en}`);
-        this.lastResult = { ja: result.ja, en: result.en, timestamp: Date.now() };
         await this.subtitle.show(result.ja, result.en).catch((e) => {
           this.log(`[OBS] Subtitle update failed: ${e instanceof Error ? e.message : String(e)}`);
         });

@@ -81,18 +81,42 @@ h2 {
 
 /* Level meter */
 .level-meter {
-  margin-top: 8px;
+  position: relative;
+  margin-top: 14px;
   height: 6px;
   background: #0f1629;
   border-radius: 3px;
-  overflow: hidden;
 }
 .level-bar {
-  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 0%;
   border-radius: 3px;
   background: #4ade80;
   transition: width 0.15s ease-out, background 0.15s;
+}
+.gate-marker {
+  position: absolute;
+  top: -6px;
+  bottom: -1px;
+  width: 0;
+  border-left: 2px solid #a0c4ff;
+  pointer-events: none;
+  transform: translateX(-1px);
+  transition: left 0.2s ease-out;
+}
+.gate-marker::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid #a0c4ff;
 }
 .level-bar.hot { background: #fbbf24; }
 .level-bar.clip { background: #ef4444; }
@@ -128,7 +152,7 @@ h2 {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .result-panel .lang {
@@ -313,6 +337,14 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   display: none;
 }
 
+/* Audio monitor wrapper: same toggle look as config-wrapper */
+.audio-monitor-wrapper.collapsed .config-toggle::before {
+  transform: rotate(-90deg);
+}
+.audio-monitor-wrapper.collapsed .audio-monitor-body {
+  display: none;
+}
+
 /* Log panel */
 .log-section { margin-top: 32px; }
 
@@ -384,13 +416,20 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       <div class="value">
         <span class="indicator off" id="vban-indicator"></span>
         <span id="vban-status">--</span>
+        <span class="indicator off" id="detecting-indicator" style="margin-left:10px;"></span>
+        <span id="detecting-label" style="color:#c0c0e0;font-size:12px;">Detecting</span>
       </div>
       <div class="level-meter" id="vban-level-meter">
         <div class="level-bar" id="vban-level-bar"></div>
+        <div class="gate-marker" id="vban-gate-marker" style="display:none;"></div>
       </div>
       <div class="level-label">
         <span id="vban-level-text"></span>
-        <button type="button" class="capture-btn" id="capture-btn" onclick="captureAudio()" data-i18n="capture_btn">Capture 5s WAV</button>
+      </div>
+      <div class="level-label" style="color:#c0c0e0;">
+        <span data-i18n="audio_effective_gate">Effective Gate (dBFS)</span>:
+        <span id="audio-effective-gate" style="font-variant-numeric:tabular-nums;">--</span>
+        <button type="button" class="capture-btn" id="capture-btn" onclick="captureAudio()" data-i18n="capture_btn" style="margin-left:auto;">Capture 5s WAV</button>
       </div>
     </div>
     <div class="status-card">
@@ -405,6 +444,25 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       <div class="value">
         <span class="indicator off" id="whisper-indicator"></span>
         <span id="whisper-status">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio plot -->
+  <div class="audio-monitor-wrapper" id="audio-monitor-wrapper">
+    <h2 class="config-toggle" id="audio-monitor-toggle">Audio Monitor</h2>
+    <div class="result-panel audio-monitor-body" id="audio-monitor-body" style="padding:10px;height:auto;">
+      <canvas id="audio-plot" width="720" height="210" style="display:block;width:100%;height:210px;background:#0f1a33;border-radius:4px;"></canvas>
+      <div id="audio-legend" style="margin-top:8px;font-size:11px;color:#a0a0c0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.6;">
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:2px;background:#ffffff;"></span>RMS</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:2px;background:#a0c4ff;"></span>Effective Gate</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:0;border-top:2px dashed #8888aa;"></span>Static Gate</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:6px;background:#22c55e;"></span>VAD In-Speech</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:6px;background:#fbbf24;"></span>Gate Pass</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:0;height:14px;border-left:2px solid #ec4899;"></span>Whisper Dispatch</span>
+        <span class="vad-debug-only" style="display:none;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:2px;background:#f472b6;"></span>VAD Prob</span>
+        <span class="vad-debug-only" style="display:none;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:0;border-top:2px dashed #f472b6;"></span>VAD Threshold</span>
+        <span id="vad-diag-text" class="vad-debug-only" style="display:none;margin-left:auto;color:#c0c0e0;font-variant-numeric:tabular-nums;"></span>
       </div>
     </div>
   </div>
@@ -542,6 +600,25 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
           <span id="cfg-audio-gate-value" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">-60</span>
         </div>
       </div>
+      <div class="field">
+        <label for="cfg-audio-adaptive-gate" data-i18n="audio_adaptive_gate">Adaptive Gate</label>
+        <div style="flex:1;display:flex;justify-content:flex-start;">
+          <input type="checkbox" id="cfg-audio-adaptive-gate" style="flex:0 0 auto;width:auto;">
+        </div>
+      </div>
+      <div class="field">
+        <label for="cfg-audio-adaptive-margin" data-i18n="audio_adaptive_margin">Adaptive Margin (dB)</label>
+        <div style="flex:1;display:flex;gap:10px;align-items:center;">
+          <input type="range" id="cfg-audio-adaptive-margin" min="0" max="24" step="1" style="flex:1;">
+          <span id="cfg-audio-adaptive-margin-value" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">6</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="cfg-ui-vad-debug" data-i18n="ui_show_vad_debug">Show VAD Debug</label>
+        <div style="flex:1;display:flex;justify-content:flex-start;">
+          <input type="checkbox" id="cfg-ui-vad-debug" style="flex:0 0 auto;width:auto;">
+        </div>
+      </div>
       </div>
     </div>
 
@@ -582,6 +659,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       vad_section: 'Voice Detection', vad_threshold: 'Threshold',
       vad_min_speech: 'Min Speech (ms)', vad_max_speech: 'Max Speech (ms)',
       audio_section: 'Audio', audio_gate: 'RMS Gate (dBFS)',
+      audio_adaptive_gate: 'Adaptive Gate', audio_adaptive_margin: 'Adaptive Margin (dB)',
+      audio_effective_gate: 'Effective Gate (dBFS)',
+      ui_show_vad_debug: 'Show VAD Debug',
     },
     ja: {
       input_label: '入力',
@@ -598,6 +678,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       vad_section: '音声検出', vad_threshold: 'しきい値',
       vad_min_speech: '最短発話 (ms)', vad_max_speech: '最長発話 (ms)',
       audio_section: 'オーディオ', audio_gate: 'RMS ゲート (dBFS)',
+      audio_adaptive_gate: '適応ゲート', audio_adaptive_margin: '適応マージン (dB)',
+      audio_effective_gate: '有効ゲート (dBFS)',
+      ui_show_vad_debug: 'VAD デバッグ表示',
     }
   };
 
@@ -688,6 +771,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   // Configuration wrapper
   setupCollapse('_config', document.getElementById('config-wrapper'), document.getElementById('config-toggle'));
 
+  // Audio monitor wrapper
+  setupCollapse('_audio_monitor', document.getElementById('audio-monitor-wrapper'), document.getElementById('audio-monitor-toggle'));
+
   // Config sub-sections
   document.querySelectorAll('.config-section[data-section]').forEach(function(sec) {
     setupCollapse(sec.getAttribute('data-section'), sec, sec.querySelector('h3'));
@@ -736,6 +822,163 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     };
   }
 
+  // --- Realtime audio plot ---
+  var showVadDebug = false;
+  function setVadDebugVisible(on) {
+    if (showVadDebug === on) return;
+    showVadDebug = on;
+    var els = document.querySelectorAll('.vad-debug-only');
+    for (var i = 0; i < els.length; i++) {
+      els[i].style.display = on ? 'inline-flex' : 'none';
+    }
+  }
+  var PLOT_LEN = 150; // 150 * 300ms = 45s window
+  var PLOT_MIN_DB = -90;
+  var PLOT_MAX_DB = 0;
+  var plotHistory = [];
+  var lastWhisperSendSeen = 0;
+  function pushPlotSample(a) {
+    var sample = a ? Object.assign({}, a) : null;
+    if (sample && sample.lastWhisperSendAt && sample.lastWhisperSendAt !== lastWhisperSendSeen) {
+      sample.whisperDispatch = true;
+      lastWhisperSendSeen = sample.lastWhisperSendAt;
+    }
+    plotHistory.push(sample);
+    if (plotHistory.length > PLOT_LEN) plotHistory.shift();
+  }
+  function dbToY(db, h) {
+    if (!Number.isFinite(db)) db = PLOT_MIN_DB;
+    var clamped = Math.max(PLOT_MIN_DB, Math.min(PLOT_MAX_DB, db));
+    return h - ((clamped - PLOT_MIN_DB) / (PLOT_MAX_DB - PLOT_MIN_DB)) * h;
+  }
+  function drawPlot() {
+    var cv = document.getElementById('audio-plot');
+    if (!cv) return;
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = cv.clientWidth || 720;
+    var cssH = cv.clientHeight || 105;
+    if (cv.width !== Math.round(cssW * dpr) || cv.height !== Math.round(cssH * dpr)) {
+      cv.width = Math.round(cssW * dpr);
+      cv.height = Math.round(cssH * dpr);
+    }
+    var ctx = cv.getContext('2d');
+    var W = cv.width;
+    var H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+
+    var padL = Math.round(34 * dpr);
+    var padR = Math.round(4 * dpr);
+    var padT = Math.round(4 * dpr);
+    var padB = Math.round(14 * dpr);
+    var w = W - padL - padR;
+    var h = H - padT - padB;
+
+    ctx.save();
+    ctx.translate(padL, padT);
+
+    // horizontal gridlines + y labels every 20 dB
+    ctx.font = (10 * dpr) + 'px sans-serif';
+    ctx.fillStyle = '#8888aa';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#1f2b4a';
+    ctx.lineWidth = 1;
+    for (var db = PLOT_MIN_DB; db <= PLOT_MAX_DB; db += 20) {
+      var y = dbToY(db, h);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+      ctx.fillText(db + ' dB', -4 * dpr, y);
+    }
+
+    // Vertical gridlines every 5s over a 45s window (labels at -45..0 every 15s)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    var step = w / PLOT_LEN;
+    for (var tSec = 45; tSec >= 0; tSec -= 5) {
+      var tIdx = PLOT_LEN - Math.round((tSec * 1000) / 300);
+      var x = tIdx * step;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+      if (tSec % 15 === 0) {
+        var label = tSec === 0 ? '0s' : '-' + tSec + 's';
+        ctx.fillText(label, x, h + 2 * dpr);
+      }
+    }
+    // frame
+    ctx.strokeStyle = '#2a2a4a';
+    ctx.strokeRect(0, 0, w, h);
+
+    // state bands (VAD + gate pass)
+    var bandH = Math.max(2, Math.round(5 * dpr));
+    for (var i = 0; i < plotHistory.length; i++) {
+      var a = plotHistory[i];
+      if (!a) continue;
+      var bx = i * step;
+      if (a.gatePass) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(bx, h - bandH, step + 1, bandH);
+      }
+      if (a.inSpeech) {
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(bx, h - bandH * 2 - 1, step + 1, bandH);
+      }
+    }
+
+    function plotLine(color, dash, getter) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, dpr);
+      ctx.setLineDash(dash || []);
+      ctx.beginPath();
+      var started = false;
+      for (var i = 0; i < plotHistory.length; i++) {
+        var a = plotHistory[i];
+        if (!a) { started = false; continue; }
+        var v = getter(a);
+        if (v === undefined) { started = false; continue; }
+        var x = i * step;
+        var y = dbToY(v, h);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    plotLine('#8888aa', [2, 3], function (a) { return a.staticGateDb; });
+    plotLine('#a0c4ff', [], function (a) { return a.effectiveGateDb; });
+    plotLine('#ffffff', [], function (a) { return a.rmsDb; });
+
+    if (showVadDebug) {
+      // VAD probability (0..1) mapped to the dB y-axis so it overlays the other lines.
+      function probToDb(p) { return PLOT_MIN_DB + Math.max(0, Math.min(1, p)) * (PLOT_MAX_DB - PLOT_MIN_DB); }
+      plotLine('#f472b6', [], function (a) {
+        return (typeof a.vadProb === 'number') ? probToDb(a.vadProb) : undefined;
+      });
+      plotLine('#f472b6', [2, 3], function (a) {
+        return (typeof a.vadThreshold === 'number') ? probToDb(a.vadThreshold) : undefined;
+      });
+    }
+
+    // Whisper dispatch markers: vertical pink line
+    ctx.strokeStyle = '#ec4899';
+    ctx.lineWidth = Math.max(2, 2 * dpr);
+    for (var i = 0; i < plotHistory.length; i++) {
+      var a = plotHistory[i];
+      if (!a || !a.whisperDispatch) continue;
+      var wx = i * step;
+      ctx.beginPath();
+      ctx.moveTo(wx, 0);
+      ctx.lineTo(wx, h);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
   // --- Status ---
   function updateStatus(s) {
     // VBAN
@@ -744,14 +987,18 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var vbanText = vbanActive ? s.vban.packetsPerSec + ' pkt/s' : 'offline';
     document.getElementById('vban-status').textContent = vbanText;
 
-    // Level meter
+    // Level meter: dBFS log scale -80..0 → 0..100%
     var peak = s.vban.peakLevel || 0;
-    var pct = Math.min(100, peak * 100);
+    var peakDb = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+    var FLOOR_DB = -80;
+    var pct = Number.isFinite(peakDb)
+      ? Math.max(0, Math.min(100, ((peakDb - FLOOR_DB) / -FLOOR_DB) * 100))
+      : 0;
     var bar = document.getElementById('vban-level-bar');
     bar.style.width = pct + '%';
-    bar.className = 'level-bar' + (peak > 0.95 ? ' clip' : peak > 0.5 ? ' hot' : '');
-    var dbfs = peak > 0 ? (20 * Math.log10(peak)).toFixed(0) : '-inf';
-    document.getElementById('vban-level-text').textContent = vbanActive ? dbfs + ' dBFS' : '';
+    bar.className = 'level-bar' + (peakDb > -0.5 ? ' clip' : peakDb > -6 ? ' hot' : '');
+    var dbfsText = Number.isFinite(peakDb) ? peakDb.toFixed(1) + ' dBFS' : '-∞ dBFS';
+    document.getElementById('vban-level-text').textContent = s.vban.listening ? dbfsText : '';
 
     // OBS
     setIndicator('obs-indicator', s.obs.connected);
@@ -764,6 +1011,40 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     if (s.whisper.inferring) wText = 'inferring...';
     if (s.whisper.queueLength > 0) wText += ' (q=' + s.whisper.queueLength + ')';
     document.getElementById('whisper-status').textContent = wText;
+
+    // Audio: effective gate + detecting indicator + realtime plot
+    if (s.audio) {
+      setIndicator('detecting-indicator', vbanActive && !!s.audio.inSpeech);
+      var eg = s.audio.effectiveGateDb;
+      var egEl = document.getElementById('audio-effective-gate');
+      if (egEl) {
+        egEl.textContent = Number.isFinite(eg) ? eg.toFixed(1) + ' dBFS' : '--';
+      }
+      var gm = document.getElementById('vban-gate-marker');
+      if (gm) {
+        if (Number.isFinite(eg)) {
+          var gatePct = Math.max(0, Math.min(100, ((eg - FLOOR_DB) / -FLOOR_DB) * 100));
+          gm.style.left = gatePct + '%';
+          gm.style.display = '';
+        } else {
+          gm.style.display = 'none';
+        }
+      }
+      pushPlotSample(vbanActive ? s.audio : null);
+      if (s.ui) setVadDebugVisible(!!s.ui.showVadDebug);
+      drawPlot();
+      if (showVadDebug) {
+        var diagEl = document.getElementById('vad-diag-text');
+        if (diagEl) {
+          var prob = typeof s.audio.vadProb === 'number' ? s.audio.vadProb : 0;
+          var thr = typeof s.audio.vadThreshold === 'number' ? s.audio.vadThreshold : 0;
+          var silMs = typeof s.audio.vadSilenceSinceLastSpeechMs === 'number' ? s.audio.vadSilenceSinceLastSpeechMs : 0;
+          var qd = typeof s.audio.vadQueueDepth === 'number' ? s.audio.vadQueueDepth : 0;
+          diagEl.textContent = 'prob=' + prob.toFixed(2) + ' thr=' + thr.toFixed(2)
+            + ' silence=' + (silMs / 1000).toFixed(1) + 's q=' + qd;
+        }
+      }
+    }
 
     if (s.lastResult && s.lastResult.ja &&
         (s.lastResult.ja !== lastResultJa || s.lastResult.en !== lastResultEn)) {
@@ -862,6 +1143,11 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var gateVal = (c.audio && c.audio.rms_gate_db) ?? -60;
     document.getElementById('cfg-audio-gate').value = gateVal;
     document.getElementById('cfg-audio-gate-value').textContent = String(gateVal);
+    document.getElementById('cfg-audio-adaptive-gate').checked = !!(c.audio && c.audio.adaptive_gate_enabled);
+    var marginVal = (c.audio && c.audio.adaptive_gate_margin_db) ?? 6;
+    document.getElementById('cfg-audio-adaptive-margin').value = marginVal;
+    document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(marginVal);
+    document.getElementById('cfg-ui-vad-debug').checked = !!(c.ui && c.ui.show_vad_debug);
 
     // Apply UI language override from config (empty = auto-detect from system)
     var overrideLang = (c.ui && c.ui.language) || '';
@@ -954,10 +1240,15 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
         rms_gate_db: parseFloat(document.getElementById('cfg-audio-gate').value),
         // Preserve existing value — edit config.local.toml to change
         normalize_target_dbfs: (savedConfig && savedConfig.audio && savedConfig.audio.normalize_target_dbfs) ?? -6,
+        adaptive_gate_enabled: document.getElementById('cfg-audio-adaptive-gate').checked,
+        adaptive_gate_margin_db: parseFloat(document.getElementById('cfg-audio-adaptive-margin').value),
+        adaptive_gate_window_sec: (savedConfig && savedConfig.audio && savedConfig.audio.adaptive_gate_window_sec) ?? 10,
+        adaptive_gate_max_db: (savedConfig && savedConfig.audio && savedConfig.audio.adaptive_gate_max_db) ?? -30,
       },
       ui: {
         // Preserve existing language override (read-only from UI — edit config.local.toml to change)
         language: (savedConfig && savedConfig.ui && savedConfig.ui.language) || '',
+        show_vad_debug: document.getElementById('cfg-ui-vad-debug').checked,
       },
     };
   }
@@ -1243,6 +1534,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   document.getElementById('cfg-audio-gate').addEventListener('input', function() {
     document.getElementById('cfg-audio-gate-value').textContent = String(this.value);
+  });
+
+  document.getElementById('cfg-audio-adaptive-margin').addEventListener('input', function() {
+    document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(this.value);
   });
 
   document.getElementById('cfg-whisper-variant').addEventListener('change', function() {

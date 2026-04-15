@@ -73,10 +73,18 @@ export class SileroVad extends EventEmitter<{
   // Auto-reset LSTM state after prolonged silence
   private silenceSinceLastSpeech = 0;
 
+  // Linear RMS floor for speech continuation. While inSpeech, chunks whose
+  // RMS stays at/above this value do NOT count toward silenceMs termination
+  // even if the VAD model's prob dips below threshold — this prevents Silero's
+  // known prob collapse on sustained vowels from cutting the segment short.
+  private continuationRmsFloor = 0;
+
   // Diagnostics
   private chunkCount = 0;
   private maxProb = 0;
   private lastDiagTime = 0;
+  private lastProbValue = 0;
+  private maxProbSinceRead = 0;
 
   constructor(opts: VadOptions) {
     super();
@@ -98,6 +106,47 @@ export class SileroVad extends EventEmitter<{
 
   updateOpts(opts: Partial<Pick<VadOptions, 'threshold' | 'minSpeechMs' | 'maxSpeechMs'>>): void {
     Object.assign(this.opts, opts);
+  }
+
+  /** Set the linear-amplitude RMS floor used for speech-continuation fallback. */
+  setContinuationFloor(linear: number): void {
+    this.continuationRmsFloor = linear;
+  }
+
+  /** True while a speech segment is being accumulated (between onset and end-of-speech). */
+  get inSpeech(): boolean {
+    return this.isSpeech;
+  }
+
+  /** Most recent speech probability (0-1) from the VAD model. */
+  get lastProb(): number {
+    return this.lastProbValue;
+  }
+
+  /**
+   * Returns the peak speech probability observed since the last call to this
+   * method, then resets the tracker. Lets callers sample the VAD between
+   * polling intervals without missing a transient spike.
+   */
+  takeMaxProb(): number {
+    const v = this.maxProbSinceRead;
+    this.maxProbSinceRead = 0;
+    return v;
+  }
+
+  /** Configured speech threshold (0-1). */
+  get threshold(): number {
+    return this.opts.threshold;
+  }
+
+  /** Samples of silence accumulated since the last detected speech chunk (0 while in speech). */
+  get silenceSinceLastSpeechSamples(): number {
+    return this.silenceSinceLastSpeech;
+  }
+
+  /** Feed queue depth (number of awaiting feed() calls). */
+  get queueDepth(): number {
+    return this.feedQueueDepth;
   }
 
   async init(): Promise<void> {
@@ -183,6 +232,8 @@ export class SileroVad extends EventEmitter<{
 
     // Get speech probability
     const prob = (results['output'] as ort.Tensor).data[0] as number;
+    this.lastProbValue = prob;
+    if (prob > this.maxProbSinceRead) this.maxProbSinceRead = prob;
 
     // Diagnostics
     this.chunkCount++;
@@ -225,7 +276,7 @@ export class SileroVad extends EventEmitter<{
       this.speechSamples.push(chunkInt16);
       this.speechSampleCount += chunkInt16.length;
 
-      // Force split if exceeding max duration
+      // Force split if exceeding max duration.
       if (this.speechSampleCount >= maxSpeechSamples) {
         this.emitSpeech();
       }
@@ -235,7 +286,23 @@ export class SileroVad extends EventEmitter<{
         // Still accumulate during grace period
         this.speechSamples.push(chunkInt16);
         this.speechSampleCount += chunkInt16.length;
-        this.silenceSamples += CHUNK_SIZE;
+
+        // Energy-based continuation fallback: Silero VAD's prob collapses on
+        // sustained vowels. If the chunk still has audible energy above the
+        // continuation floor, treat it as speech for termination purposes —
+        // but keep prob-derived `silenceSamples` unchanged otherwise so a
+        // genuine pause still ends the segment after silenceMs.
+        let chunkRms = 0;
+        if (this.continuationRmsFloor > 0) {
+          let sum = 0;
+          for (let i = 0; i < chunk.length; i++) sum += chunk[i]! * chunk[i]!;
+          chunkRms = Math.sqrt(sum / chunk.length);
+        }
+        if (chunkRms >= this.continuationRmsFloor) {
+          this.silenceSamples = 0;
+        } else {
+          this.silenceSamples += CHUNK_SIZE;
+        }
 
         if (this.silenceSamples >= silenceThreshold) {
           // End of speech
@@ -245,6 +312,12 @@ export class SileroVad extends EventEmitter<{
             // Too short, discard
             this.resetSpeech();
           }
+        } else if (this.speechSampleCount >= maxSpeechSamples) {
+          // Force split: prob may have collapsed mid-utterance (Silero vowel
+          // saturation) and the energy-based continuation fallback keeps
+          // silenceSamples pinned at 0. Without this branch the segment grows
+          // unbounded and Whisper Dispatch never fires for the chunk.
+          this.emitSpeech();
         }
       } else {
         // Append to pre-speech ring buffer for potential future onset
@@ -278,10 +351,14 @@ export class SileroVad extends EventEmitter<{
       durationMs: (total / 16000) * 1000,
     });
 
-    this.resetSpeech();
+    // Reset LSTM hidden state between utterances. Keeping it across segments
+    // causes prob to collapse — once the model has "committed" to a speech
+    // region, the state biases toward low prob on subsequent chunks even when
+    // audio energy is high, blocking detection of the next utterance.
+    this.resetState();
   }
 
-  private resetSpeech(): void {
+private resetSpeech(): void {
     this.isSpeech = false;
     this.speechSamples = [];
     this.speechSampleCount = 0;

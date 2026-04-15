@@ -97,7 +97,7 @@ test.describe('API', () => {
         whisper: { server: 'http://localhost:8080', binary: '', model: '', binary_variant: '', model_name: '' },
         subtitle: { clear_delay: 3, chars_per_line: 0 },
         vad: { threshold: 0.5, min_speech_ms: 500, max_speech_ms: 10000 },
-        audio: { rms_gate_db: -60, normalize_target_dbfs: -6 },
+        audio: { rms_gate_db: -60, normalize_target_dbfs: -6, adaptive_gate_enabled: false, adaptive_gate_margin_db: 6, adaptive_gate_window_sec: 10 },
         ui: { language: '' },
       },
     });

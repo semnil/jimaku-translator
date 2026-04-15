@@ -155,6 +155,7 @@ async function handleSaveConfig(
   pipeline.updateVadConfig(config.vad);
   pipeline.updateAudioConfig(config.audio);
   pipeline.updateVbanConfig(config.vban);
+  pipeline.updateUiConfig(config.ui);
 
   json(res, { saved: localPath });
 }
@@ -186,7 +187,11 @@ function parseConfigInput(data: unknown): Config | null {
   if (typeof vad.threshold !== 'number') return null;
   if (typeof vad.min_speech_ms !== 'number' || typeof vad.max_speech_ms !== 'number') return null;
   if (typeof audio.rms_gate_db !== 'number' || typeof audio.normalize_target_dbfs !== 'number') return null;
+  if (typeof audio.adaptive_gate_enabled !== 'boolean') return null;
+  if (typeof audio.adaptive_gate_margin_db !== 'number' || typeof audio.adaptive_gate_window_sec !== 'number') return null;
+  if (typeof audio.adaptive_gate_max_db !== 'number') return null;
   if (ui.language !== '' && ui.language !== 'en' && ui.language !== 'ja') return null;
+  if (typeof ui.show_vad_debug !== 'boolean') return null;
 
   return data as Config;
 }
@@ -236,10 +241,15 @@ function configToToml(config: Config): string {
   lines.push('[audio]');
   lines.push(`rms_gate_db = ${config.audio.rms_gate_db}`);
   lines.push(`normalize_target_dbfs = ${config.audio.normalize_target_dbfs}`);
+  lines.push(`adaptive_gate_enabled = ${config.audio.adaptive_gate_enabled}`);
+  lines.push(`adaptive_gate_margin_db = ${config.audio.adaptive_gate_margin_db}`);
+  lines.push(`adaptive_gate_window_sec = ${config.audio.adaptive_gate_window_sec}`);
+  lines.push(`adaptive_gate_max_db = ${config.audio.adaptive_gate_max_db}`);
   lines.push('');
 
   lines.push('[ui]');
   lines.push(`language = "${e(config.ui.language)}"`);
+  lines.push(`show_vad_debug = ${config.ui.show_vad_debug}`);
   lines.push('');
 
   return lines.join('\n');
