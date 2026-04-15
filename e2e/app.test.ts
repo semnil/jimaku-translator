@@ -25,7 +25,8 @@ test.describe('GUI', () => {
     // All fields should have non-empty values
     await expect(page.locator('#cfg-obs-host')).not.toHaveValue('');
     await expect(page.locator('#cfg-obs-port')).not.toHaveValue('');
-    await expect(page.locator('#cfg-whisper-server')).not.toHaveValue('');
+    await expect(page.locator('#cfg-whisper-variant')).toBeVisible();
+    await expect(page.locator('#cfg-whisper-model-select')).toBeVisible();
     await expect(page.locator('#cfg-vad-threshold')).not.toHaveValue('');
   });
 
@@ -34,7 +35,8 @@ test.describe('GUI', () => {
     await expect(page.locator('#cfg-obs-password')).toBeVisible();
     await expect(page.locator('#cfg-obs-source-ja')).toBeVisible();
     await expect(page.locator('#cfg-obs-source-en')).toBeVisible();
-    await expect(page.locator('#cfg-whisper-server')).toBeVisible();
+    await expect(page.locator('#cfg-whisper-variant')).toBeVisible();
+    await expect(page.locator('#cfg-whisper-model-select')).toBeVisible();
     await expect(page.locator('#cfg-subtitle-delay')).toBeVisible();
     await expect(page.locator('#cfg-subtitle-chars')).toBeVisible();
     await expect(page.locator('#cfg-vad-threshold')).toBeVisible();
