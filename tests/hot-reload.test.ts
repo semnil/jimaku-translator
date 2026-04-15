@@ -19,7 +19,7 @@ describe('SubtitleManager.updateOpts', () => {
   it('updates charsPerLine and affects line breaking', async () => {
     const obs = mockObs();
     const mgr = new SubtitleManager(obs as any, {
-      clearDelay: 10, charsPerLine: 40, closedCaption: false, ccLanguage: 'ja',
+      clearDelay: 0, charsPerLine: 40, closedCaption: false, ccLanguage: 'ja',
     });
 
     // 20-char string should not break at charsPerLine=40
@@ -36,7 +36,7 @@ describe('SubtitleManager.updateOpts', () => {
   it('updates closedCaption flag', async () => {
     const obs = mockObs();
     const mgr = new SubtitleManager(obs as any, {
-      clearDelay: 10, charsPerLine: 40, closedCaption: false, ccLanguage: 'ja',
+      clearDelay: 0, charsPerLine: 40, closedCaption: false, ccLanguage: 'ja',
     });
 
     await mgr.show('テスト', 'test');
@@ -50,7 +50,7 @@ describe('SubtitleManager.updateOpts', () => {
   it('updates ccLanguage', async () => {
     const obs = mockObs();
     const mgr = new SubtitleManager(obs as any, {
-      clearDelay: 10, charsPerLine: 40, closedCaption: true, ccLanguage: 'ja',
+      clearDelay: 0, charsPerLine: 40, closedCaption: true, ccLanguage: 'ja',
     });
 
     await mgr.show('日本語', 'English');
@@ -64,7 +64,7 @@ describe('SubtitleManager.updateOpts', () => {
   it('partial update preserves other opts', async () => {
     const obs = mockObs();
     const mgr = new SubtitleManager(obs as any, {
-      clearDelay: 10, charsPerLine: 5, closedCaption: true, ccLanguage: 'ja',
+      clearDelay: 0, charsPerLine: 5, closedCaption: true, ccLanguage: 'ja',
     });
 
     // Only update ccLanguage — charsPerLine=5 and closedCaption=true should remain

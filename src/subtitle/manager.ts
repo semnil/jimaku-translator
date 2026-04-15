@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { ObsClient } from '../obs/client.js';
 
 export interface SubtitleManagerOptions {
@@ -11,12 +12,21 @@ export interface SubtitleManagerOptions {
   ccLanguage: 'ja' | 'en';
 }
 
-export class SubtitleManager {
+export class SubtitleManager extends EventEmitter<{
+  /** Fired when a subtitle has been (or would have been) pushed to OBS. */
+  displayed: [{ ja: string; en: string }];
+  /** Fired when the active subtitle is cleared (either explicitly or via clearDelay). */
+  cleared: [];
+}> {
   private readonly obs: ObsClient;
   private opts: SubtitleManagerOptions;
   private clearTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingLatest: { ja: string; en: string } | null = null;
+  private nextAllowedShowTime = 0;
 
   constructor(obs: ObsClient, opts: SubtitleManagerOptions) {
+    super();
     this.obs = obs;
     this.opts = opts;
   }
@@ -26,15 +36,49 @@ export class SubtitleManager {
   }
 
   /**
-   * Display subtitle text. Resets the auto-clear timer.
+   * Display subtitle text. Enforces clearDelay between successive updates:
+   * if the previous subtitle has not yet reached its scheduled clear time,
+   * the new content is held and shown once that time elapses. Later calls
+   * during the hold replace the pending content (latest wins).
    */
   async show(ja: string, en: string): Promise<void> {
+    const now = Date.now();
+    const wait = this.nextAllowedShowTime - now;
+    // If a pending timer is already scheduled, always route through it so
+    // the late-fire callback and a fresh direct call cannot race to update
+    // the subtitle at the same instant (which would produce a visible
+    // flicker/double-update when clearDelay expires exactly between them).
+    if (wait > 0 || this.pendingTimer) {
+      this.pendingLatest = { ja, en };
+      if (!this.pendingTimer) {
+        this.pendingTimer = setTimeout(() => {
+          this.pendingTimer = null;
+          const latest = this.pendingLatest;
+          this.pendingLatest = null;
+          if (latest) void this.showNow(latest.ja, latest.en).catch(() => {});
+        }, Math.max(0, wait));
+      }
+      return;
+    }
+    return this.showNow(ja, en);
+  }
+
+  private async showNow(ja: string, en: string): Promise<void> {
     this.cancelClear();
+
+    // Reserve the slot synchronously so any show() call arriving during the
+    // OBS round-trip routes through the pending-timer path instead of racing
+    // into a second showNow.
+    this.nextAllowedShowTime = Date.now() + this.opts.clearDelay * 1000;
 
     const formattedJa = this.breakLines(ja);
     const formattedEn = this.breakLines(en);
 
-    if (!this.obs.isConnected()) return;
+    if (!this.obs.isConnected()) {
+      this.emit('displayed', { ja, en });
+      this.scheduleClear();
+      return;
+    }
 
     await this.obs.updateSubtitle(formattedJa, formattedEn);
 
@@ -42,12 +86,20 @@ export class SubtitleManager {
       await this.obs.sendCaption(this.opts.ccLanguage === 'en' ? en : ja);
     }
 
+    this.emit('displayed', { ja, en });
     this.scheduleClear();
   }
 
   /** Immediately clear subtitles. */
   async clear(): Promise<void> {
     this.cancelClear();
+    if (this.pendingTimer) {
+      clearTimeout(this.pendingTimer);
+      this.pendingTimer = null;
+      this.pendingLatest = null;
+    }
+    this.nextAllowedShowTime = 0;
+    this.emit('cleared');
     if (!this.obs.isConnected()) return;
     await this.obs.clearSubtitle();
   }
@@ -93,6 +145,7 @@ export class SubtitleManager {
 
   private scheduleClear(): void {
     this.clearTimer = setTimeout(async () => {
+      this.emit('cleared');
       await this.obs.clearSubtitle().catch(() => {});
     }, this.opts.clearDelay * 1000);
   }
