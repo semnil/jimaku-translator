@@ -13,6 +13,7 @@
     "electron:dev": "tsx src/electron.ts",
     "dist:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win --publish=never",
     "dist:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --publish=never && node --env-file-if-exists=.env build/notarize-dmg.cjs",
+    "dist:mac:app": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --dir --publish=never",
     "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --publish=never --config.mac.identity=null --config.mac.notarize=false",
     "test": "vitest run",
     "test:watch": "vitest",
