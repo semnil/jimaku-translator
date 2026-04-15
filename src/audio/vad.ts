@@ -155,7 +155,17 @@ export class SileroVad extends EventEmitter<{
   }
 
   async init(): Promise<void> {
-    this.session = await ort.InferenceSession.create(this.opts.modelPath);
+    // Disable onnxruntime thread parallelism. Silero VAD is tiny; running it
+    // sequentially on one thread avoids the TBB/OpenMP spin loops that spike
+    // CPU use while the pipeline is idle.
+    this.session = await ort.InferenceSession.create(this.opts.modelPath, {
+      intraOpNumThreads: 1,
+      interOpNumThreads: 1,
+      executionMode: 'sequential',
+      graphOptimizationLevel: 'all',
+      enableCpuMemArena: true,
+      enableMemPattern: true,
+    });
   }
 
   /**
