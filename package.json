@@ -1,6 +1,6 @@
 {
   "name": "jimaku-translator",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Real-time OBS subtitle system: VBAN audio → Whisper recognition → OBS WebSocket",
   "author": "semnil",
   "main": "dist/electron.js",
