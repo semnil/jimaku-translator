@@ -21,11 +21,9 @@ body {
   padding: 20px;
 }
 
-h1 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #fff;
+.app-title {
+  font-size: 1.25rem;
+  margin: 0 0 12px;
 }
 
 h2 {
@@ -40,7 +38,7 @@ h2 {
 /* Status panel */
 .status-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -86,7 +84,7 @@ h2 {
 }
 
 .indicator.on { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
-.indicator.off { background: #666; }
+.indicator.off { background: #888; }
 .indicator.warn { background: #fbbf24; box-shadow: 0 0 6px #fbbf2466; }
 
 /* Level meter */
@@ -139,8 +137,8 @@ h2 {
   align-items: center;
 }
 .capture-btn {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: 11px;
+  padding: 8px 10px;
   background: #2a2a4a;
   color: #a0a0c0;
   border: 1px solid #3a3a5a;
@@ -209,11 +207,25 @@ h2 {
   font-weight: 600;
   color: #c0c0e0;
   margin-bottom: 10px;
+}
+
+.config-section.collapsed h3 {
+  margin-bottom: 0;
+}
+
+.section-toggle {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
   user-select: none;
 }
 
-.config-section h3::before {
+.section-toggle::before {
   content: '▼';
   display: inline-block;
   margin-right: 6px;
@@ -221,12 +233,8 @@ h2 {
   transition: transform 0.15s;
 }
 
-.config-section.collapsed h3::before {
+.config-section.collapsed .section-toggle::before {
   transform: rotate(-90deg);
-}
-
-.config-section.collapsed h3 {
-  margin-bottom: 0;
 }
 
 .config-section.collapsed .section-body {
@@ -275,6 +283,7 @@ h2 {
   color: #e0e0e0;
   font-size: 13px;
   font-family: "Consolas", "SF Mono", monospace;
+  text-overflow: ellipsis;
 }
 
 .field input[type="range"] {
@@ -312,11 +321,17 @@ h2 {
 .actions {
   display: flex;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 0;
+  padding: 12px 0;
+  position: sticky;
+  bottom: 0;
+  background: #1a1a2e;
+  z-index: 10;
+  border-top: 1px solid #2a2a4a;
 }
 
 button {
-  padding: 8px 20px;
+  padding: 9px 20px;
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -343,6 +358,14 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 .config-toggle {
   cursor: pointer;
   user-select: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  display: inline;
 }
 
 .config-toggle::before {
@@ -375,6 +398,14 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 .log-toggle {
   cursor: pointer;
   user-select: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  display: inline;
 }
 
 .log-toggle::before {
@@ -411,13 +442,23 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 .log-panel .entry.error { color: #f87171; }
 
 /* Visible focus for keyboard navigation */
-.config-toggle:focus, .log-toggle:focus, .config-section h3:focus,
+.config-toggle:focus, .log-toggle:focus, .section-toggle:focus,
 .dl-cancel:focus {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
 
+button:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
 .field input:disabled, .field input[type="range"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.field select:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -438,11 +479,25 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 }
 .toast.show { opacity: 1; }
 .toast.error { background: #ef4444; }
+
+.install-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #a5b4fc;
+  background: #1f2147;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
 </style>
 </head>
 <body>
-<div class="container">
+<main class="container">
 
+  <h1 class="app-title">Jimaku Translator</h1>
 
   <!-- Status -->
   <h2>Status</h2>
@@ -465,7 +520,9 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       <div class="level-label" style="color:#c0c0e0;">
         <span data-i18n="audio_effective_gate">Effective Gate (dBFS)</span>:
         <span id="audio-effective-gate" style="font-variant-numeric:tabular-nums;">--</span>
-        <button type="button" class="capture-btn" id="capture-btn" onclick="captureAudio()" data-i18n="capture_btn" style="margin-left:auto;">Capture 5s WAV</button>
+      </div>
+      <div style="margin-top:8px;">
+        <button type="button" class="capture-btn" id="capture-btn" onclick="captureAudio()" data-i18n="capture_btn" style="display:block;width:100%;">Capture 5s WAV</button>
       </div>
     </div>
     <div class="status-card">
@@ -487,7 +544,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   <!-- Audio plot -->
   <div class="audio-monitor-wrapper" id="audio-monitor-wrapper">
-    <h2 class="config-toggle" id="audio-monitor-toggle">Audio Monitor</h2>
+    <h2><button class="config-toggle" id="audio-monitor-toggle" data-i18n="audioMonitor">Audio Monitor</button></h2>
     <div class="result-panel audio-monitor-body" id="audio-monitor-body" style="padding:10px;height:auto;">
       <canvas id="audio-plot" width="720" height="210" style="display:block;width:100%;height:210px;background:#0f1a33;border-radius:4px;"></canvas>
       <div id="audio-legend" style="margin-top:8px;font-size:11px;color:#a0a0c0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.6;">
@@ -512,11 +569,11 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   <!-- Config -->
   <div class="config-wrapper" id="config-wrapper">
-  <h2 class="config-toggle" id="config-toggle" data-i18n="configuration">Configuration</h2>
+  <h2><button class="config-toggle" id="config-toggle" data-i18n="configuration">Configuration</button></h2>
   <form id="config-form" class="config-body">
     <div class="config-section" data-section="vban">
-      <h3>VBAN</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="vban-body">VBAN</button></h3>
+      <div class="section-body" id="vban-body">
       <div class="field">
         <label for="cfg-vban-port" data-i18n="vban_port">Port</label>
         <input type="number" id="cfg-vban-port" min="1" max="65535">
@@ -529,8 +586,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     </div>
 
     <div class="config-section" data-section="obs">
-      <h3>OBS WebSocket</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="obs-body">OBS WebSocket</button></h3>
+      <div class="section-body" id="obs-body">
       <div class="field">
         <label for="cfg-obs-host" data-i18n="obs_host">Host</label>
         <input type="text" id="cfg-obs-host">
@@ -555,7 +612,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
         <label for="cfg-obs-cc" data-i18n="obs_cc">Closed Caption</label>
         <div style="flex:1;display:flex;gap:8px;align-items:center;">
           <input type="checkbox" id="cfg-obs-cc" style="flex:0;width:16px;height:16px;">
-          <select id="cfg-obs-cc-lang" style="width:110px;">
+          <select id="cfg-obs-cc-lang" style="width:110px;" data-i18n-aria-label="ccLanguage" aria-label="Closed Caption Language">
             <option value="en" data-i18n="lang_en">English</option>
             <option value="ja" data-i18n="lang_ja">Japanese</option>
           </select>
@@ -568,28 +625,30 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
       <div class="field">
         <label></label>
         <div style="display:flex;gap:6px;">
-          <button type="button" class="secondary" id="refresh-sources-btn" style="padding:4px 12px;font-size:12px;" data-i18n="refresh_sources">Refresh Sources</button>
-          <button type="button" class="secondary" id="reconnect-obs-btn" style="padding:4px 12px;font-size:12px;" data-i18n="reconnect">Reconnect</button>
+          <button type="button" class="secondary" id="refresh-sources-btn" style="padding:9px 12px;font-size:12px;" data-i18n="refresh_sources">Refresh Sources</button>
+          <button type="button" class="secondary" id="reconnect-obs-btn" style="padding:9px 12px;font-size:12px;" data-i18n="reconnect">Reconnect</button>
         </div>
       </div>
       </div>
     </div>
 
     <div class="config-section" data-section="whisper">
-      <h3 data-i18n="whisper_section">Whisper</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="whisper-body" data-i18n="whisper_section">Whisper</button></h3>
+      <div class="section-body" id="whisper-body">
       <div class="field">
-        <label data-i18n="whisper_binary">Binary</label>
+        <label for="cfg-whisper-variant" data-i18n="whisper_binary">Binary</label>
         <div style="flex:1;min-width:0;display:flex;gap:6px;align-items:center;">
           <select id="cfg-whisper-variant" style="flex:1;min-width:0;"></select>
-          <button type="button" class="secondary" id="download-binary-btn" style="padding:4px 12px;font-size:12px;white-space:nowrap;" data-i18n="download">Download</button>
+          <span class="install-badge" id="installed-binary-badge" data-i18n="btn_installed" style="display:none;">Installed</span>
+          <button type="button" class="secondary" id="download-binary-btn" style="padding:9px 12px;font-size:12px;white-space:nowrap;" data-i18n="download">Download</button>
         </div>
       </div>
       <div class="field">
-        <label data-i18n="whisper_model">Model</label>
+        <label for="cfg-whisper-model-select" data-i18n="whisper_model">Model</label>
         <div style="flex:1;min-width:0;display:flex;gap:6px;align-items:center;">
           <select id="cfg-whisper-model-select" style="flex:1;min-width:0;"></select>
-          <button type="button" class="secondary" id="download-model-btn" style="padding:4px 12px;font-size:12px;white-space:nowrap;" data-i18n="download">Download</button>
+          <span class="install-badge" id="installed-model-badge" data-i18n="btn_installed" style="display:none;">Installed</span>
+          <button type="button" class="secondary" id="download-model-btn" style="padding:9px 12px;font-size:12px;white-space:nowrap;" data-i18n="download">Download</button>
         </div>
       </div>
       <div id="download-progress-container" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"></div>
@@ -597,8 +656,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     </div>
 
     <div class="config-section" data-section="subtitle">
-      <h3 data-i18n="subtitle_section">Subtitle</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="subtitle-body" data-i18n="subtitle_section">Subtitle</button></h3>
+      <div class="section-body" id="subtitle-body">
       <div class="field">
         <label for="cfg-subtitle-delay" data-i18n="subtitle_delay">Clear Delay (sec)</label>
         <input type="number" id="cfg-subtitle-delay" min="0" step="0.5">
@@ -611,8 +670,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     </div>
 
     <div class="config-section" data-section="vad">
-      <h3 data-i18n="vad_section">Voice Detection</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="vad-body" data-i18n="vad_section">Voice Detection</button></h3>
+      <div class="section-body" id="vad-body">
       <div class="field">
         <label for="cfg-vad-threshold" data-i18n="vad_threshold">Threshold</label>
         <div style="flex:1;display:flex;gap:10px;align-items:center;">
@@ -632,8 +691,8 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     </div>
 
     <div class="config-section" data-section="audio">
-      <h3 data-i18n="audio_section">Audio</h3>
-      <div class="section-body">
+      <h3><button class="section-toggle" aria-expanded="true" aria-controls="audio-body" data-i18n="audio_section">Audio</button></h3>
+      <div class="section-body" id="audio-body">
       <div class="field">
         <label for="cfg-audio-gate" data-i18n="audio_gate">RMS Gate (dBFS)</label>
         <div style="flex:1;display:flex;gap:10px;align-items:center;">
@@ -664,18 +723,18 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     </div>
 
     <div class="actions">
-      <button type="submit" class="primary" id="save-btn" data-i18n="save">Save</button>
-      <button type="button" class="secondary" id="reload-btn" data-i18n="reload">Reload</button>
+      <button type="submit" class="primary" id="save-btn" data-i18n="save" data-i18n-title="saveTooltip" title="Save changes to config.local.toml">Save</button>
+      <button type="button" class="secondary" id="reload-btn" data-i18n="reload" data-i18n-title="reloadTooltip" title="Discard changes and reload from server">Reload</button>
     </div>
   </form>
   </div>
 
   <!-- Log -->
   <div class="log-section">
-    <h2 class="log-toggle" id="log-toggle" data-i18n="log">Log</h2>
+    <h2><button class="log-toggle" id="log-toggle" data-i18n="log">Log</button></h2>
     <div class="log-panel" id="log-panel"></div>
   </div>
-</div>
+</main>
 
 <div class="toast" id="toast"></div>
 
@@ -687,14 +746,18 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   var i18n = {
     en: {
       input_label: 'Input',
+      audioMonitor: 'Audio Monitor',
       waiting: 'Waiting for speech...',
       capture_btn: 'Capture 5s WAV', configuration: 'Configuration', log: 'Log',
       save: 'Save', reload: 'Reload',
+      saveTooltip: 'Save changes to config.local.toml',
+      reloadTooltip: 'Discard changes and reload from server',
       lang_en: 'English', lang_ja: 'Japanese',
       vban_port: 'Port', vban_stream: 'Stream Name', vban_stream_ph: '(empty = all)',
       obs_host: 'Host', obs_port: 'Port', obs_password: 'Password', obs_password_ph: '(empty = none)',
       obs_source_ja: 'Japanese Text Source', obs_source_en: 'English Text Source', obs_cc: 'Closed Caption',
       refresh_sources: 'Refresh Sources', reconnect: 'Reconnect',
+      ccLanguage: 'Closed Caption Language',
       whisper_section: 'Whisper', whisper_binary: 'Binary', whisper_model: 'Model', download: 'Download',
       subtitle_section: 'Subtitle', subtitle_delay: 'Clear Delay (sec)', subtitle_chars: 'Chars per Line',
       vad_section: 'Voice Detection', vad_threshold: 'Threshold',
@@ -746,14 +809,18 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     },
     ja: {
       input_label: '入力',
+      audioMonitor: 'オーディオモニター',
       waiting: '音声を待機中...',
       capture_btn: '5秒キャプチャ', configuration: '設定', log: 'ログ',
       save: '保存', reload: '再読込',
+      saveTooltip: '変更を config.local.toml に保存',
+      reloadTooltip: '変更を破棄してサーバーから再読込',
       lang_en: '英語', lang_ja: '日本語',
       vban_port: 'ポート', vban_stream: 'ストリーム名', vban_stream_ph: '(空 = すべて受信)',
       obs_host: 'ホスト', obs_port: 'ポート', obs_password: 'パスワード', obs_password_ph: '(空 = なし)',
       obs_source_ja: '日本語テキストソース', obs_source_en: '英語テキストソース', obs_cc: 'クローズドキャプション',
       refresh_sources: 'ソース更新', reconnect: '再接続',
+      ccLanguage: 'クローズドキャプション言語',
       whisper_section: 'Whisper', whisper_binary: 'バイナリ', whisper_model: 'モデル', download: 'ダウンロード',
       subtitle_section: '字幕', subtitle_delay: '消去までの待機 (秒)', subtitle_chars: '1行の文字数',
       vad_section: '音声検出', vad_threshold: 'しきい値',
@@ -811,6 +878,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   }
 
   function applyI18n(lang) {
+    document.documentElement.lang = lang;
     var dict = i18n[lang] || i18n.en;
     document.querySelectorAll('[data-i18n]').forEach(function(el) {
       var key = el.getAttribute('data-i18n');
@@ -823,6 +891,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
       var key = el.getAttribute('data-i18n-title');
       if (dict[key]) el.title = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-aria-label');
+      if (dict[key]) el.setAttribute('aria-label', dict[key]);
     });
   }
 
@@ -887,8 +959,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   function setupCollapse(key, el, toggle, onToggle) {
     if (collapsed[key]) el.classList.add('collapsed');
-    toggle.setAttribute('role', 'button');
-    toggle.setAttribute('tabindex', '0');
+    if (toggle.tagName !== 'BUTTON') {
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('tabindex', '0');
+    }
     toggle.setAttribute('aria-expanded', String(!el.classList.contains('collapsed')));
     function fire() {
       el.classList.toggle('collapsed');
@@ -916,12 +990,10 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
 
   // Config sub-sections
   document.querySelectorAll('.config-section[data-section]').forEach(function(sec) {
-    setupCollapse(sec.getAttribute('data-section'), sec, sec.querySelector('h3'));
+    setupCollapse(sec.getAttribute('data-section'), sec, sec.querySelector('h3 button.section-toggle'));
   });
 
   // Log panel (uses 'open' class instead of 'collapsed')
-  logToggle.setAttribute('role', 'button');
-  logToggle.setAttribute('tabindex', '0');
   if (collapsed._log) { logToggle.classList.add('open'); logPanel.classList.add('open'); }
   logToggle.setAttribute('aria-expanded', String(logPanel.classList.contains('open')));
   function toggleLog() {
@@ -1255,7 +1327,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   // --- Log ---
   function appendLog(msg) {
     const entry = document.createElement('div');
-    entry.className = 'entry' + (msg.includes('Error') || msg.includes('failed') ? ' error' : '');
+    entry.className = 'entry' + (/error|failed|エラー|失敗/i.test(msg) ? ' error' : '');
     const ts = document.createElement('span');
     ts.className = 'ts';
     ts.textContent = new Date().toLocaleTimeString('ja-JP', { hour12: false });
@@ -1588,6 +1660,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
           if (v.id === d.recommended) label += ' (' + t('tag_recommended') + ')';
           if (d.installed[v.id]) label += ' [' + t('tag_installed') + ']';
           opt.textContent = label;
+          opt.title = label;
           sel.appendChild(opt);
         });
         // Select current variant
@@ -1611,6 +1684,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
           var label = m.label;
           if (d.installed[m.id]) label += ' [' + t('tag_installed') + ']';
           opt.textContent = label;
+          opt.title = label;
           sel.appendChild(opt);
         });
         if (whisperConfig.model_name) {
@@ -1624,11 +1698,14 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   function updateBinaryStatus(installed) {
     var sel = document.getElementById('cfg-whisper-variant');
     var btn = document.getElementById('download-binary-btn');
+    var badge = document.getElementById('installed-binary-badge');
     if (installed && installed[sel.value]) {
-      btn.textContent = t('btn_installed');
+      badge.style.display = '';
+      btn.style.display = 'none';
       btn.disabled = true;
     } else {
-      btn.textContent = t('btn_download');
+      badge.style.display = 'none';
+      btn.style.display = '';
       btn.disabled = false;
     }
   }
@@ -1636,11 +1713,14 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
   function updateModelStatus(installed) {
     var sel = document.getElementById('cfg-whisper-model-select');
     var btn = document.getElementById('download-model-btn');
+    var badge = document.getElementById('installed-model-badge');
     if (installed && installed[sel.value]) {
-      btn.textContent = t('btn_installed');
+      badge.style.display = '';
+      btn.style.display = 'none';
       btn.disabled = true;
     } else {
-      btn.textContent = t('btn_download');
+      badge.style.display = 'none';
+      btn.style.display = '';
       btn.disabled = false;
     }
   }
@@ -1696,7 +1776,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     el.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">'
       + '<div style="flex:1;font-size:11px;color:#b8b8d4;" class="dl-label">' + escapeHtml(title) + '</div>'
       + '<span class="dl-cancel" role="button" tabindex="0" aria-label="' + escapeHtml(cancelTitle) + '"'
-      + ' style="font-size:14px;color:#f87171;cursor:pointer;line-height:1;padding:2px 6px;" title="' + escapeHtml(cancelTitle) + '">&times;</span>'
+      + ' style="font-size:14px;color:#f87171;cursor:pointer;line-height:1;padding:6px 10px;" title="' + escapeHtml(cancelTitle) + '">&times;</span>'
       + '</div>'
       + '<div style="background:#0f1629;border-radius:4px;height:6px;overflow:hidden;">'
       + '<div class="dl-bar" style="height:100%;background:#6366f1;width:0%;transition:width 0.3s;"></div>'
@@ -1802,6 +1882,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     var noSource = !document.getElementById('cfg-obs-source-ja').value && !document.getElementById('cfg-obs-source-en').value;
     var row = document.getElementById('cfg-cc-warning-row');
     if (row) row.style.display = (ccOn && noSource) ? '' : 'none';
+    document.getElementById('cfg-obs-cc-lang').disabled = !ccOn;
   }
   document.getElementById('cfg-obs-cc').addEventListener('change', syncCcWarning);
   document.getElementById('cfg-obs-source-ja').addEventListener('change', syncCcWarning);
@@ -1816,7 +1897,7 @@ button.secondary:disabled { background: #2a2a4a; color: #666; cursor: not-allowe
     }
     var whisperSec = document.querySelector('.config-section[data-section="whisper"]');
     if (whisperSec && whisperSec.classList.contains('collapsed')) {
-      whisperSec.querySelector('h3').click();
+      whisperSec.querySelector('h3 button.section-toggle').click();
     }
     if (whisperSec) whisperSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
