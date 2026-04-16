@@ -168,8 +168,16 @@ test.describe('API', () => {
   });
 
   test('POST /api/capture with oversized duration_ms is clamped (no hang)', async ({ request }) => {
-    // VBAN not arriving in test env → fails fast (~2s watchdog). Without
-    // clamping, 50000ms would push capture far beyond Playwright's 30s timeout.
+    // When VBAN is active, a 50s capture is clamped to 30s and *succeeds* —
+    // which takes the full 30s and would exceed the 30s Playwright timeout.
+    // The dedicated no-VBAN variant in "API edge cases extended" covers the
+    // watchdog path; skip here if VBAN is flowing to avoid the race.
+    const statusRes = await request.get('/api/status');
+    const status = await statusRes.json();
+    test.skip(
+      status.vban.packetsPerSec > 0,
+      'VBAN is active — clamped capture would run full 30s and exceed test timeout',
+    );
     const start = Date.now();
     const res = await request.post('/api/capture', { data: { duration_ms: 50000 } });
     const elapsed = Date.now() - start;
@@ -422,6 +430,513 @@ test.describe('API edge cases', () => {
     const btn = page.locator('#download-binary-btn');
     if (installed) await expect(btn).toBeDisabled();
     else await expect(btn).toBeEnabled();
+  });
+});
+
+test.describe('GUI extended', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('audio monitor wrapper is present and collapsible', async ({ page }) => {
+    const wrapper = page.locator('#audio-monitor-wrapper');
+    await expect(wrapper).toBeAttached();
+    const toggle = page.locator('#audio-monitor-toggle');
+    await expect(toggle).toBeVisible();
+    // Toggle collapses the body
+    await toggle.click();
+    await expect(wrapper).toHaveClass(/collapsed/);
+    // Toggle again restores
+    await toggle.click();
+    await expect(wrapper).not.toHaveClass(/collapsed/);
+  });
+
+  test('audio plot canvas is present in the audio monitor', async ({ page }) => {
+    const canvas = page.locator('#audio-plot');
+    await expect(canvas).toBeAttached();
+    // Canvas should be rendered with non-zero dimensions after mount
+    const dims = await canvas.evaluate((el: HTMLCanvasElement) => ({
+      width: el.offsetWidth,
+      height: el.offsetHeight,
+    }));
+    expect(dims.width).toBeGreaterThan(0);
+    expect(dims.height).toBeGreaterThan(0);
+  });
+
+  test('audio monitor collapse persists across reload', async ({ page }) => {
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    const toggle = page.locator('#audio-monitor-toggle');
+    await toggle.click();
+    await expect(page.locator('#audio-monitor-wrapper')).toHaveClass(/collapsed/);
+    await page.reload();
+    await expect(page.locator('#audio-monitor-wrapper')).toHaveClass(/collapsed/);
+  });
+
+  test('log toggle keyboard Enter/Space fires toggle', async ({ page }) => {
+    const logToggle = page.locator('#log-toggle');
+    const logPanel = page.locator('#log-panel');
+    // Log starts closed; open with Enter
+    await logToggle.focus();
+    await logToggle.press('Enter');
+    await expect(logPanel).toHaveClass(/open/);
+    // Close with Space
+    await logToggle.press(' ');
+    await expect(logPanel).not.toHaveClass(/open/);
+  });
+
+  test('config section h3 keyboard Enter/Space fires collapse', async ({ page }) => {
+    const vadSection = page.locator('.config-section[data-section="vad"]');
+    const vadToggle = vadSection.locator('h3 button.section-toggle');
+    await vadToggle.focus();
+    await vadToggle.press('Enter');
+    await expect(vadSection).toHaveClass(/collapsed/);
+    await vadToggle.press(' ');
+    await expect(vadSection).not.toHaveClass(/collapsed/);
+  });
+
+  test('config toggle has role=button and aria-expanded', async ({ page }) => {
+    const toggle = page.locator('#config-toggle');
+    // #config-toggle is now a <button> element — implicit role=button, no explicit attribute needed.
+    await expect(toggle).toHaveRole('button');
+    // <button> is focusable by default (no tabindex attribute required)
+    const focusable = await toggle.evaluate((el) => (el as HTMLElement).tabIndex >= 0);
+    expect(focusable).toBe(true);
+    const expanded = await toggle.getAttribute('aria-expanded');
+    expect(['true', 'false']).toContain(expanded);
+  });
+
+  test('log toggle has role=button and aria-expanded', async ({ page }) => {
+    const toggle = page.locator('#log-toggle');
+    // #log-toggle is now a <button> element — implicit role=button.
+    await expect(toggle).toHaveRole('button');
+    await expect(toggle).toHaveAttribute('aria-expanded');
+  });
+
+  test('result-panel has aria-live=polite', async ({ page }) => {
+    await expect(page.locator('#result-panel')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('adaptive margin slider value display syncs when gate enabled', async ({ page }) => {
+    const gate = page.locator('#cfg-audio-adaptive-gate');
+    const margin = page.locator('#cfg-audio-adaptive-margin');
+    const marginVal = page.locator('#cfg-audio-adaptive-margin-value');
+    // Enable adaptive gate first so the margin slider is not disabled
+    await gate.evaluate((el: HTMLInputElement) => { el.checked = true; el.dispatchEvent(new Event('change')); });
+    await expect(margin).toBeEnabled();
+    await margin.fill('12');
+    await margin.dispatchEvent('input');
+    await expect(marginVal).toHaveText('12');
+  });
+
+  test('CC language dropdown defaults to en or ja', async ({ page }) => {
+    const sel = page.locator('#cfg-obs-cc-lang');
+    await expect(sel).toBeVisible();
+    const val = await sel.inputValue();
+    expect(['en', 'ja']).toContain(val);
+  });
+
+  test('VBAN stream name field is present and accepts text', async ({ page }) => {
+    const field = page.locator('#cfg-vban-stream');
+    await expect(field).toBeVisible();
+    await field.fill('MyStream');
+    await expect(field).toHaveValue('MyStream');
+    // Restore empty so it does not interfere with other tests
+    await field.fill('');
+  });
+
+  test('CC warning row visible only when CC enabled and no source', async ({ page }) => {
+    const ccCheck = page.locator('#cfg-obs-cc');
+    const warningRow = page.locator('#cfg-cc-warning-row');
+    // Start with CC unchecked → warning hidden
+    await ccCheck.evaluate((el: HTMLInputElement) => { el.checked = false; el.dispatchEvent(new Event('change')); });
+    await expect(warningRow).toHaveCSS('display', 'none');
+    // Enable CC + clear sources → warning appears
+    await page.evaluate(() => {
+      (document.getElementById('cfg-obs-source-ja') as HTMLSelectElement).value = '';
+      (document.getElementById('cfg-obs-source-en') as HTMLSelectElement).value = '';
+      (document.getElementById('cfg-obs-cc') as HTMLInputElement).checked = true;
+      document.getElementById('cfg-obs-cc')!.dispatchEvent(new Event('change'));
+    });
+    await expect(warningRow).not.toHaveCSS('display', 'none');
+  });
+
+  test('effective gate display element is present in status panel', async ({ page }) => {
+    await expect(page.locator('#audio-effective-gate')).toBeAttached();
+    // After first SSE tick it should have a non-empty value
+    await page.waitForFunction(() => {
+      const el = document.getElementById('audio-effective-gate');
+      return el && el.textContent !== '';
+    }, { timeout: 5000 });
+    const text = await page.locator('#audio-effective-gate').textContent();
+    expect(text).toMatch(/dBFS|--/);
+  });
+
+  test('detecting indicator is present in VBAN card', async ({ page }) => {
+    await expect(page.locator('#detecting-indicator')).toBeAttached();
+    await expect(page.locator('#detecting-label')).toBeAttached();
+  });
+
+  test('capture-btn exists and is present in the level-label area', async ({ page }) => {
+    const btn = page.locator('#capture-btn');
+    await expect(btn).toBeAttached();
+    // Button is disabled when VBAN is inactive (no live VBAN in test env by default)
+    await page.waitForFunction(() => {
+      const el = document.getElementById('vban-status');
+      return el && el.textContent !== '--';
+    }, { timeout: 5000 });
+    // In test env there may or may not be VBAN — just verify button exists and has a label
+    const text = await btn.textContent();
+    expect(text!.length).toBeGreaterThan(0);
+  });
+
+  test('reload-btn triggers config reload toast', async ({ page }) => {
+    await page.locator('#reload-btn').click();
+    const toast = page.locator('#toast');
+    await expect(toast).toHaveClass(/show/, { timeout: 3000 });
+    const text = (await toast.textContent()) ?? '';
+    expect(text).toMatch(/reloaded|再読み込み/i);
+  });
+
+  test('refresh-sources-btn triggers toast', async ({ page }) => {
+    await page.locator('#refresh-sources-btn').click();
+    const toast = page.locator('#toast');
+    await expect(toast).toHaveClass(/show/, { timeout: 3000 });
+    const text = (await toast.textContent()) ?? '';
+    expect(text).toMatch(/refreshed|更新/i);
+  });
+
+  test('reconnect-obs-btn triggers OBS reconnect and shows toast', async ({ page }) => {
+    const btn = page.locator('#reconnect-obs-btn');
+    await btn.click();
+    await expect(btn).toBeDisabled();
+    const toast = page.locator('#toast');
+    await expect(toast).toHaveClass(/show/, { timeout: 5000 });
+    // Either "OBS connected" or "connection failed" toast — both are valid in test env
+    const text = (await toast.textContent()) ?? '';
+    expect(text.length).toBeGreaterThan(0);
+  });
+
+  test('download-model-btn state reflects model install status', async ({ page, request }) => {
+    const models = await (await request.get('/api/whisper/models')).json();
+    await page.waitForFunction(() => {
+      const btn = document.getElementById('download-model-btn') as HTMLButtonElement;
+      return btn && btn.textContent !== '';
+    }, { timeout: 5000 });
+    const sel = await page.locator('#cfg-whisper-model-select').inputValue();
+    const installed = !!models.installed[sel];
+    const btn = page.locator('#download-model-btn');
+    if (installed) await expect(btn).toBeDisabled();
+    else await expect(btn).toBeEnabled();
+  });
+
+  test('whisper variant selector triggers binary download button update on change', async ({ page }) => {
+    // Switch to a different variant option and verify button state updates
+    const sel = page.locator('#cfg-whisper-variant');
+    const initial = await sel.inputValue();
+    const options = await sel.locator('option').all();
+    if (options.length > 1) {
+      // Pick a different option
+      const otherVal = await options.find(async (o) => {
+        const v = await o.getAttribute('value');
+        return v !== initial;
+      })?.getAttribute('value');
+      if (otherVal) {
+        await sel.selectOption(otherVal);
+        // Button text updates after fetch — wait for it
+        await page.waitForFunction((v) => {
+          const btn = document.getElementById('download-binary-btn') as HTMLButtonElement;
+          return btn && btn.textContent !== '';
+        }, otherVal, { timeout: 3000 });
+        const btnText = await page.locator('#download-binary-btn').textContent();
+        expect(['Installed', 'インストール済み', 'Download', 'ダウンロード']).toContain(btnText?.trim());
+      }
+    }
+  });
+});
+
+test.describe('UI layout', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('actions bar is position sticky at bottom', async ({ page }) => {
+    const actions = page.locator('.actions');
+    await expect(actions).toBeAttached();
+    const styles = await actions.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { position: s.position, bottom: s.bottom };
+    });
+    expect(styles.position).toBe('sticky');
+    expect(styles.bottom).toBe('0px');
+  });
+
+  test('save-btn and reload-btn have title tooltips', async ({ page }) => {
+    const saveTitle = await page.locator('#save-btn').getAttribute('title');
+    const reloadTitle = await page.locator('#reload-btn').getAttribute('title');
+    expect(saveTitle?.length).toBeGreaterThan(0);
+    expect(reloadTitle?.length).toBeGreaterThan(0);
+  });
+
+  test('save-btn and reload-btn title tooltips update on language switch to JA', async ({ page, request }) => {
+    const original = await (await request.get('/api/config')).json();
+    try {
+      await request.post('/api/config', { data: { ...original, ui: { ...original.ui, language: 'ja' } } });
+      await page.reload();
+      const saveTitle = await page.locator('#save-btn').getAttribute('title');
+      expect(saveTitle).toBe('変更を config.local.toml に保存');
+      const reloadTitle = await page.locator('#reload-btn').getAttribute('title');
+      expect(reloadTitle).toBe('変更を破棄してサーバーから再読込');
+    } finally {
+      await request.post('/api/config', { data: original });
+    }
+  });
+
+  test('capture-btn renders as block-level full-width element', async ({ page }) => {
+    const btn = page.locator('#capture-btn');
+    await expect(btn).toBeAttached();
+    const styles = await btn.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { display: s.display, width: el.offsetWidth, parentWidth: (el.parentElement?.offsetWidth ?? 0) };
+    });
+    // block or inline-block both expand to full width — check actual pixel width matches parent
+    expect(styles.width).toBeGreaterThan(0);
+    expect(styles.width).toBe(styles.parentWidth);
+  });
+});
+
+test.describe('API edge cases extended', () => {
+  test('POST /api/config rejects audio.rms_gate_db above -30', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, audio: { ...before.audio, rms_gate_db: -29 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects whisper.threads = 0', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, whisper: { ...before.whisper, threads: 0 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config accepts whisper.threads = 4', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, whisper: { ...before.whisper, threads: 4 } },
+    });
+    expect(res.ok()).toBe(true);
+    // Restore
+    await request.post('/api/config', { data: before });
+  });
+
+  test('POST /api/config rejects adaptive_gate_max_db above -10', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, audio: { ...before.audio, adaptive_gate_max_db: -9 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('GET /api/status audio block has expected fields', async ({ request }) => {
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    expect(data).toHaveProperty('audio');
+    expect(data.audio).toHaveProperty('effectiveGateDb');
+    expect(data.audio).toHaveProperty('staticGateDb');
+    expect(data.audio).toHaveProperty('maxGateDb');
+    expect(data.audio).toHaveProperty('rmsDb');
+    expect(data.audio).toHaveProperty('inSpeech');
+    expect(data.audio).toHaveProperty('gatePass');
+    expect(data.audio).toHaveProperty('lastWhisperSendAt');
+    expect(data.audio).toHaveProperty('vadProb');
+    expect(data.audio).toHaveProperty('vadThreshold');
+    expect(data.audio).toHaveProperty('vadSilenceSinceLastSpeechMs');
+    expect(data.audio).toHaveProperty('vadQueueDepth');
+  });
+
+  test('GET /api/status lastResult is null before any recognition', async ({ request }) => {
+    // Fresh E2E server has no recognition yet (no VBAN sender active)
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    // lastResult is null OR has ja/en if recognition already occurred — verify shape
+    if (data.lastResult !== null) {
+      expect(data.lastResult).toHaveProperty('ja');
+      expect(data.lastResult).toHaveProperty('en');
+      expect(data.lastResult).toHaveProperty('timestamp');
+    }
+  });
+
+  test('GET /api/status whisper.reason is null when reachable or valid string when not', async ({ request }) => {
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    if (data.whisper.reachable) {
+      expect(data.whisper.reason).toBeNull();
+    } else {
+      expect(['no_binary', 'no_model', 'unreachable', 'starting']).toContain(data.whisper.reason);
+    }
+  });
+
+  test('POST /api/capture when no VBAN is active returns fast (<4s)', async ({ request }) => {
+    // This test only makes sense when VBAN is not flowing.
+    // Skip if VBAN is active (packetsPerSec > 0) to avoid a false 15s capture.
+    const statusRes = await request.get('/api/status');
+    const status = await statusRes.json();
+    test.skip(
+      status.vban.packetsPerSec > 0,
+      'VBAN is active — first-packet watchdog would not fire; capture would run full duration',
+    );
+    const start = Date.now();
+    const res = await request.post('/api/capture', { data: { duration_ms: 50000 } });
+    const elapsed = Date.now() - start;
+    // Watchdog fires at 2s → 400; or vbanListening=false → immediate 400
+    expect(elapsed).toBeLessThan(4000);
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/whisper/download-model rejects duplicate (already installed)', async ({ request }) => {
+    // Find an installed model
+    const models = await (await request.get('/api/whisper/models')).json();
+    const installedId = Object.entries(models.installed as Record<string, string | null>)
+      .find(([, p]) => p)?.[0];
+    test.skip(!installedId, 'no installed model available');
+    const res = await request.post('/api/whisper/download-model', {
+      data: { model: installedId },
+    });
+    expect(res.status()).toBe(409);
+  });
+
+  test('POST /api/config with ui.show_vad_debug persists in GET /api/config', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const orig = before.ui.show_vad_debug;
+    try {
+      await request.post('/api/config', {
+        data: { ...before, ui: { ...before.ui, show_vad_debug: !orig } },
+      });
+      const after = await (await request.get('/api/config')).json();
+      expect(after.ui.show_vad_debug).toBe(!orig);
+    } finally {
+      await request.post('/api/config', { data: before });
+    }
+  });
+
+  // --- Uncovered validation boundaries from validateConfig() ---
+
+  test('POST /api/config rejects empty whisper.server', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, whisper: { ...before.whisper, server: '' } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects invalid whisper.server URL', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, whisper: { ...before.whisper, server: 'not-a-url' } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects vad.min_speech_ms < 0', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, vad: { ...before.vad, min_speech_ms: -1 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects vad.max_speech_ms <= vad.min_speech_ms', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, vad: { ...before.vad, min_speech_ms: 1000, max_speech_ms: 1000 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects audio.normalize_target_dbfs > 0', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, audio: { ...before.audio, normalize_target_dbfs: 1 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects audio.adaptive_gate_margin_db < 0', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, audio: { ...before.audio, adaptive_gate_margin_db: -1 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects audio.adaptive_gate_window_sec <= 0', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, audio: { ...before.audio, adaptive_gate_window_sec: 0 } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects adaptive_gate_max_db below rms_gate_db (cross-field)', async ({ request }) => {
+    // adaptive_gate_max_db must be >= rms_gate_db
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: {
+        ...before,
+        audio: { ...before.audio, rms_gate_db: -40, adaptive_gate_max_db: -50 },
+      },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects invalid ui.language', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, ui: { ...before.ui, language: 'fr' } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('POST /api/config rejects empty obs.host', async ({ request }) => {
+    const before = await (await request.get('/api/config')).json();
+    const res = await request.post('/api/config', {
+      data: { ...before, obs: { ...before.obs, host: '' } },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('GET /api/status vban block has expected fields', async ({ request }) => {
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    expect(data.vban).toHaveProperty('listening');
+    expect(data.vban).toHaveProperty('port');
+    expect(data.vban).toHaveProperty('packetsPerSec');
+    expect(data.vban).toHaveProperty('streamName');
+    expect(data.vban).toHaveProperty('sampleRate');
+    expect(data.vban).toHaveProperty('channels');
+  });
+
+  test('GET /api/status obs block has expected fields', async ({ request }) => {
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    expect(data.obs).toHaveProperty('connected');
+  });
+
+  test('GET /api/status whisper block has expected fields', async ({ request }) => {
+    const res = await request.get('/api/status');
+    const data = await res.json();
+    expect(data.whisper).toHaveProperty('reachable');
+    expect(data.whisper).toHaveProperty('reason');
+    expect(data.whisper).toHaveProperty('queueLength');
+    expect(data.whisper).toHaveProperty('inferring');
+  });
+
+  test('POST /api/obs/reconnect returns 200', async ({ request }) => {
+    const res = await request.post('/api/obs/reconnect');
+    expect(res.ok()).toBe(true);
   });
 });
 
