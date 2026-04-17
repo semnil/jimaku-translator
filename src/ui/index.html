@@ -505,9 +505,9 @@ button:focus-visible {
     <div class="status-card">
       <div class="label" data-i18n="input_label">Input</div>
       <div class="value">
-        <span class="indicator off" id="vban-indicator"></span>
+        <span class="indicator off" id="vban-indicator" aria-hidden="true"></span>
         <span id="vban-status">--</span>
-        <span class="indicator off" id="detecting-indicator" style="margin-left:10px;"></span>
+        <span class="indicator off" id="detecting-indicator" aria-hidden="true" style="margin-left:10px;"></span>
         <span id="detecting-label" style="color:#c0c0e0;font-size:12px;">Detecting</span>
       </div>
       <div class="level-meter" id="vban-level-meter">
@@ -518,8 +518,7 @@ button:focus-visible {
         <span id="vban-level-text"></span>
       </div>
       <div class="level-label" style="color:#c0c0e0;">
-        <span data-i18n="audio_effective_gate">Effective Gate (dBFS)</span>:
-        <span id="audio-effective-gate" style="font-variant-numeric:tabular-nums;">--</span>
+        <span data-i18n="audio_effective_gate">Effective Gate (dBFS)</span>:<span id="audio-effective-gate" style="font-variant-numeric:tabular-nums;">--</span>
       </div>
       <div style="margin-top:8px;">
         <button type="button" class="capture-btn" id="capture-btn" onclick="captureAudio()" data-i18n="capture_btn" style="display:block;width:100%;">Capture 5s WAV</button>
@@ -528,14 +527,14 @@ button:focus-visible {
     <div class="status-card">
       <div class="label">OBS</div>
       <div class="value">
-        <span class="indicator off" id="obs-indicator"></span>
+        <span class="indicator off" id="obs-indicator" aria-hidden="true"></span>
         <span id="obs-status">--</span>
       </div>
     </div>
     <div class="status-card">
       <div class="label">Whisper</div>
       <div class="value">
-        <span class="indicator off" id="whisper-indicator"></span>
+        <span class="indicator off" id="whisper-indicator" aria-hidden="true"></span>
         <span id="whisper-status">--</span>
       </div>
       <a href="#" id="whisper-hint" class="status-hint" style="display:none;" data-i18n="whisper_unreachable_hint">Open Whisper section to download</a>
@@ -544,9 +543,9 @@ button:focus-visible {
 
   <!-- Audio plot -->
   <div class="audio-monitor-wrapper" id="audio-monitor-wrapper">
-    <h2><button class="config-toggle" id="audio-monitor-toggle" data-i18n="audioMonitor">Audio Monitor</button></h2>
+    <h2><button class="config-toggle" id="audio-monitor-toggle" aria-expanded="true" aria-controls="audio-monitor-body" data-i18n="audioMonitor">Audio Monitor</button></h2>
     <div class="result-panel audio-monitor-body" id="audio-monitor-body" style="padding:10px;height:auto;">
-      <canvas id="audio-plot" width="720" height="210" style="display:block;width:100%;height:210px;background:#0f1a33;border-radius:4px;"></canvas>
+      <canvas id="audio-plot" width="720" height="210" style="display:block;width:100%;height:210px;background:#0f1a33;border-radius:4px;" role="img" aria-label="Audio level monitor showing RMS history with gate thresholds" data-i18n-aria-label="audioPlotLabel"></canvas>
       <div id="audio-legend" style="margin-top:8px;font-size:11px;color:#a0a0c0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.6;">
         <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:2px;background:#ffffff;"></span>RMS</span>
         <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:2px;background:#a0c4ff;"></span>Effective Gate</span>
@@ -563,13 +562,13 @@ button:focus-visible {
 
   <!-- Last result -->
   <h2>Last Recognition</h2>
-  <div class="result-panel" id="result-panel" aria-live="polite">
+  <div class="result-panel" id="result-panel" aria-live="polite" aria-relevant="additions">
     <div class="empty" data-i18n="waiting">Waiting for speech...</div>
   </div>
 
   <!-- Config -->
   <div class="config-wrapper" id="config-wrapper">
-  <h2><button class="config-toggle" id="config-toggle" data-i18n="configuration">Configuration</button></h2>
+  <h2><button class="config-toggle" id="config-toggle" aria-expanded="true" aria-controls="config-form" data-i18n="configuration">Configuration</button></h2>
   <form id="config-form" class="config-body">
     <div class="config-section" data-section="vban">
       <h3><button class="section-toggle" aria-expanded="true" aria-controls="vban-body">VBAN</button></h3>
@@ -676,7 +675,7 @@ button:focus-visible {
         <label for="cfg-vad-threshold" data-i18n="vad_threshold">Threshold</label>
         <div style="flex:1;display:flex;gap:10px;align-items:center;">
           <input type="range" id="cfg-vad-threshold" min="0" max="1" step="0.05" style="flex:1;">
-          <span id="cfg-vad-threshold-value" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">0.50</span>
+          <span id="cfg-vad-threshold-value" aria-hidden="true" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">0.50</span>
         </div>
       </div>
       <div class="field">
@@ -697,7 +696,7 @@ button:focus-visible {
         <label for="cfg-audio-gate" data-i18n="audio_gate">RMS Gate (dBFS)</label>
         <div style="flex:1;display:flex;gap:10px;align-items:center;">
           <input type="range" id="cfg-audio-gate" min="-90" max="-30" step="1" style="flex:1;">
-          <span id="cfg-audio-gate-value" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">-60</span>
+          <span id="cfg-audio-gate-value" aria-hidden="true" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">-60</span>
         </div>
       </div>
       <div class="field">
@@ -710,7 +709,7 @@ button:focus-visible {
         <label for="cfg-audio-adaptive-margin" data-i18n="audio_adaptive_margin">Adaptive Margin (dB)</label>
         <div style="flex:1;display:flex;gap:10px;align-items:center;">
           <input type="range" id="cfg-audio-adaptive-margin" min="0" max="24" step="1" style="flex:1;">
-          <span id="cfg-audio-adaptive-margin-value" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">6</span>
+          <span id="cfg-audio-adaptive-margin-value" aria-hidden="true" style="min-width:36px;text-align:right;font-variant-numeric:tabular-nums;color:#c0c0e0;">6</span>
         </div>
       </div>
       <div class="field">
@@ -731,12 +730,12 @@ button:focus-visible {
 
   <!-- Log -->
   <div class="log-section">
-    <h2><button class="log-toggle" id="log-toggle" data-i18n="log">Log</button></h2>
-    <div class="log-panel" id="log-panel"></div>
+    <h2><button class="log-toggle" id="log-toggle" aria-expanded="false" aria-controls="log-panel" data-i18n="log">Log</button></h2>
+    <div class="log-panel" id="log-panel" role="region" aria-labelledby="log-toggle"></div>
   </div>
 </main>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
 <script>
 (function() {
@@ -747,6 +746,8 @@ button:focus-visible {
     en: {
       input_label: 'Input',
       audioMonitor: 'Audio Monitor',
+      audioPlotLabel: 'Audio level monitor showing RMS history with gate thresholds',
+      audioPlotLabelDebug: 'Audio level monitor with VAD probability overlay and internal debug trace',
       waiting: 'Waiting for speech...',
       capture_btn: 'Capture 5s WAV', configuration: 'Configuration', log: 'Log',
       save: 'Save', reload: 'Reload',
@@ -778,6 +779,7 @@ button:focus-visible {
       // Capture
       capture_recording: 'Recording...', capture_failed: 'Capture failed: {0}',
       capture_no_input: 'No VBAN input — start audio source first',
+      capture_active_hint: 'Capture 5 seconds of incoming audio as a WAV file for debugging',
       // Config save / reload
       saved: 'Saved.', saved_restart: 'Saved. Restart to apply.',
       saved_restart_obs: 'Saved. Restart to apply. OBS: use Reconnect.',
@@ -802,6 +804,12 @@ button:focus-visible {
       val_invalid_threshold: 'VAD threshold must be between 0 and 1',
       val_invalid_number: '{0} must be a valid number',
       val_invalid_int: '{0} must be a non-negative integer',
+      field_min_speech: 'Min Speech (ms)',
+      field_max_speech: 'Max Speech (ms)',
+      field_clear_delay: 'Clear Delay',
+      field_chars_per_line: 'Chars per Line',
+      field_rms_gate: 'RMS Gate',
+      field_adaptive_margin: 'Adaptive Margin',
       val_cc_no_source: 'Closed Caption is enabled but no text source is selected',
       val_cc_no_source_save: 'Saved, but Closed Caption is enabled with no text source — captions will not be sent',
       // Last Recognition
@@ -810,6 +818,8 @@ button:focus-visible {
     ja: {
       input_label: '入力',
       audioMonitor: 'オーディオモニター',
+      audioPlotLabel: 'RMS 履歴とゲート閾値を表示するオーディオレベルモニター',
+      audioPlotLabelDebug: 'VAD 確率と内部デバッグトレースを重ねたオーディオレベルモニター',
       waiting: '音声を待機中...',
       capture_btn: '5秒キャプチャ', configuration: '設定', log: 'ログ',
       save: '保存', reload: '再読込',
@@ -839,6 +849,7 @@ button:focus-visible {
       whisper_reason_starting: 'Whisper サーバー起動中...',
       capture_recording: '録音中...', capture_failed: 'キャプチャ失敗: {0}',
       capture_no_input: 'VBAN 入力がありません — 先に音声ソースを開始してください',
+      capture_active_hint: '受信中の音声を 5 秒間キャプチャしてデバッグ用 WAV として保存',
       saved: '保存しました。',
       saved_restart: '保存しました。再起動で反映されます。',
       saved_restart_obs: '保存しました。再起動で反映されます。OBS は再接続を実行してください。',
@@ -861,6 +872,12 @@ button:focus-visible {
       val_invalid_threshold: 'VAD しきい値は 0〜1 の範囲で指定してください',
       val_invalid_number: '{0} は数値で指定してください',
       val_invalid_int: '{0} は 0 以上の整数で指定してください',
+      field_min_speech: '最短発話 (ms)',
+      field_max_speech: '最長発話 (ms)',
+      field_clear_delay: '消去待機',
+      field_chars_per_line: '1行の文字数',
+      field_rms_gate: 'RMS ゲート',
+      field_adaptive_margin: '適応マージン',
       val_cc_no_source: 'クローズドキャプションが有効ですが、テキストソースが選択されていません',
       val_cc_no_source_save: '保存しましたが、CC 有効でソース未選択のため CC は送信されません',
       result_clear: 'クリア',
@@ -1054,6 +1071,8 @@ button:focus-visible {
     for (var i = 0; i < els.length; i++) {
       els[i].style.display = on ? 'inline-flex' : 'none';
     }
+    var cv = document.getElementById('audio-plot');
+    if (cv) cv.setAttribute('aria-label', t(on ? 'audioPlotLabelDebug' : 'audioPlotLabel'));
   }
   var PLOT_LEN = 150; // 150 * 300ms = 45s window
   var PLOT_MIN_DB = -90;
@@ -1212,7 +1231,7 @@ button:focus-visible {
     var captureBtn = document.getElementById('capture-btn');
     if (captureBtn && !captureBtn.dataset.busy) {
       captureBtn.disabled = !vbanActive;
-      captureBtn.title = vbanActive ? '' : t('capture_no_input');
+      captureBtn.title = vbanActive ? t('capture_active_hint') : t('capture_no_input');
     }
 
     // Level meter: dBFS log scale -80..0 → 0..100%
@@ -1403,15 +1422,18 @@ button:focus-visible {
     document.getElementById('cfg-subtitle-chars').value = c.subtitle.chars_per_line;
     document.getElementById('cfg-vad-threshold').value = c.vad.threshold;
     document.getElementById('cfg-vad-threshold-value').textContent = Number(c.vad.threshold).toFixed(2);
+    document.getElementById('cfg-vad-threshold').setAttribute('aria-valuetext', Number(c.vad.threshold).toFixed(2));
     document.getElementById('cfg-vad-min-speech').value = c.vad.min_speech_ms;
     document.getElementById('cfg-vad-max-speech').value = c.vad.max_speech_ms;
     var gateVal = (c.audio && c.audio.rms_gate_db) ?? -60;
     document.getElementById('cfg-audio-gate').value = gateVal;
     document.getElementById('cfg-audio-gate-value').textContent = String(gateVal);
+    document.getElementById('cfg-audio-gate').setAttribute('aria-valuetext', gateVal + ' dBFS');
     document.getElementById('cfg-audio-adaptive-gate').checked = !!(c.audio && c.audio.adaptive_gate_enabled);
     var marginVal = (c.audio && c.audio.adaptive_gate_margin_db) ?? 6;
     document.getElementById('cfg-audio-adaptive-margin').value = marginVal;
     document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(marginVal);
+    document.getElementById('cfg-audio-adaptive-margin').setAttribute('aria-valuetext', marginVal + ' dB');
     document.getElementById('cfg-ui-vad-debug').checked = !!(c.ui && c.ui.show_vad_debug);
     syncAdaptiveMarginEnabled();
     syncCcWarning();
@@ -1564,22 +1586,22 @@ button:focus-visible {
       return { ok: false, error: t('val_invalid_threshold') };
     }
     if (!isInt(cfg.vad.min_speech_ms) || cfg.vad.min_speech_ms < 0) {
-      return { ok: false, error: t('val_invalid_int', 'Min Speech (ms)') };
+      return { ok: false, error: t('val_invalid_int', t('field_min_speech')) };
     }
     if (!isInt(cfg.vad.max_speech_ms) || cfg.vad.max_speech_ms < 100) {
-      return { ok: false, error: t('val_invalid_int', 'Max Speech (ms)') };
+      return { ok: false, error: t('val_invalid_int', t('field_max_speech')) };
     }
     if (!Number.isFinite(cfg.subtitle.clear_delay) || cfg.subtitle.clear_delay < 0) {
-      return { ok: false, error: t('val_invalid_number', 'Clear Delay') };
+      return { ok: false, error: t('val_invalid_number', t('field_clear_delay')) };
     }
     if (!isInt(cfg.subtitle.chars_per_line) || cfg.subtitle.chars_per_line < 0) {
-      return { ok: false, error: t('val_invalid_int', 'Chars per Line') };
+      return { ok: false, error: t('val_invalid_int', t('field_chars_per_line')) };
     }
     if (!Number.isFinite(cfg.audio.rms_gate_db)) {
-      return { ok: false, error: t('val_invalid_number', 'RMS Gate') };
+      return { ok: false, error: t('val_invalid_number', t('field_rms_gate')) };
     }
     if (!Number.isFinite(cfg.audio.adaptive_gate_margin_db)) {
-      return { ok: false, error: t('val_invalid_number', 'Adaptive Margin') };
+      return { ok: false, error: t('val_invalid_number', t('field_adaptive_margin')) };
     }
     return { ok: true };
   }
@@ -1856,14 +1878,17 @@ button:focus-visible {
 
   document.getElementById('cfg-vad-threshold').addEventListener('input', function() {
     document.getElementById('cfg-vad-threshold-value').textContent = Number(this.value).toFixed(2);
+    this.setAttribute('aria-valuetext', Number(this.value).toFixed(2));
   });
 
   document.getElementById('cfg-audio-gate').addEventListener('input', function() {
     document.getElementById('cfg-audio-gate-value').textContent = String(this.value);
+    this.setAttribute('aria-valuetext', this.value + ' dBFS');
   });
 
   document.getElementById('cfg-audio-adaptive-margin').addEventListener('input', function() {
     document.getElementById('cfg-audio-adaptive-margin-value').textContent = String(this.value);
+    this.setAttribute('aria-valuetext', this.value + ' dB');
   });
 
   function syncAdaptiveMarginEnabled() {
@@ -1882,7 +1907,9 @@ button:focus-visible {
     var noSource = !document.getElementById('cfg-obs-source-ja').value && !document.getElementById('cfg-obs-source-en').value;
     var row = document.getElementById('cfg-cc-warning-row');
     if (row) row.style.display = (ccOn && noSource) ? '' : 'none';
-    document.getElementById('cfg-obs-cc-lang').disabled = !ccOn;
+    var ccLangEl = document.getElementById('cfg-obs-cc-lang');
+    ccLangEl.disabled = !ccOn;
+    ccLangEl.setAttribute('aria-disabled', String(!ccOn));
   }
   document.getElementById('cfg-obs-cc').addEventListener('change', syncCcWarning);
   document.getElementById('cfg-obs-source-ja').addEventListener('change', syncCcWarning);
