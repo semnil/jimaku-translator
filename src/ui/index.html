@@ -321,13 +321,21 @@ h2 {
 .actions {
   display: flex;
   gap: 10px;
-  margin-top: 0;
+  margin-top: 28px;
   padding: 12px 0;
   position: sticky;
   bottom: 0;
-  background: #1a1a2e;
+  background: rgba(26, 26, 46, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 10;
-  border-top: 1px solid #2a2a4a;
+  border-top: 1px solid #3a3a5a;
+}
+
+/* Reserve room below the last field so the sticky action bar does not cover
+   inputs when the form is scrolled near the bottom of the viewport. */
+#config-form {
+  padding-bottom: 72px;
 }
 
 button {
