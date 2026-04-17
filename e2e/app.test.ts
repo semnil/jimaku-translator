@@ -517,6 +517,69 @@ test.describe('GUI extended', () => {
     await expect(page.locator('#result-panel')).toHaveAttribute('aria-live', 'polite');
   });
 
+  test('audio-monitor-toggle has aria-expanded and aria-controls', async ({ page }) => {
+    const toggle = page.locator('#audio-monitor-toggle');
+    await expect(toggle).toHaveRole('button');
+    const expanded = await toggle.getAttribute('aria-expanded');
+    expect(['true', 'false']).toContain(expanded);
+    await expect(toggle).toHaveAttribute('aria-controls', 'audio-monitor-body');
+  });
+
+  test('slider aria-valuetext is set on page load', async ({ page }) => {
+    // Each slider should have aria-valuetext after UI init
+    const vadSlider = page.locator('#cfg-vad-threshold');
+    const gateSlider = page.locator('#cfg-audio-gate');
+    const marginSlider = page.locator('#cfg-audio-adaptive-margin');
+    const vadText = await vadSlider.getAttribute('aria-valuetext');
+    const gateText = await gateSlider.getAttribute('aria-valuetext');
+    const marginText = await marginSlider.getAttribute('aria-valuetext');
+    expect(vadText).toMatch(/^\d*\.?\d+$/);
+    expect(gateText).toMatch(/dBFS/);
+    expect(marginText).toMatch(/dB/);
+  });
+
+  test('slider aria-valuetext updates on input', async ({ page }) => {
+    const slider = page.locator('#cfg-vad-threshold');
+    await slider.fill('0.75');
+    await slider.dispatchEvent('input');
+    const text = await slider.getAttribute('aria-valuetext');
+    expect(text).toBe('0.75');
+  });
+
+  test('toast has aria-live=assertive and aria-atomic=true', async ({ page }) => {
+    const toast = page.locator('#toast');
+    await expect(toast).toHaveAttribute('aria-live', 'assertive');
+    await expect(toast).toHaveAttribute('aria-atomic', 'true');
+  });
+
+  test('log-panel has role=region and aria-labelledby=log-toggle', async ({ page }) => {
+    const panel = page.locator('#log-panel');
+    await expect(panel).toHaveAttribute('role', 'region');
+    await expect(panel).toHaveAttribute('aria-labelledby', 'log-toggle');
+  });
+
+  test('status indicator spans have aria-hidden=true', async ({ page }) => {
+    for (const id of ['vban-indicator', 'obs-indicator', 'whisper-indicator', 'detecting-indicator']) {
+      await expect(page.locator(`#${id}`)).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  test('audio canvas has role=img and non-empty aria-label', async ({ page }) => {
+    const canvas = page.locator('#audio-plot');
+    await expect(canvas).toHaveAttribute('role', 'img');
+    const label = await canvas.getAttribute('aria-label');
+    expect(label?.length).toBeGreaterThan(0);
+  });
+
+  test('CC language dropdown has aria-disabled=true when CC is off', async ({ page }) => {
+    const ccCheck = page.locator('#cfg-obs-cc');
+    const ccLang = page.locator('#cfg-obs-cc-lang');
+    await ccCheck.evaluate((el: HTMLInputElement) => { el.checked = false; el.dispatchEvent(new Event('change')); });
+    await expect(ccLang).toHaveAttribute('aria-disabled', 'true');
+    await ccCheck.evaluate((el: HTMLInputElement) => { el.checked = true; el.dispatchEvent(new Event('change')); });
+    await expect(ccLang).toHaveAttribute('aria-disabled', 'false');
+  });
+
   test('adaptive margin slider value display syncs when gate enabled', async ({ page }) => {
     const gate = page.locator('#cfg-audio-adaptive-gate');
     const margin = page.locator('#cfg-audio-adaptive-margin');
