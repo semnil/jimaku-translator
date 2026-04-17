@@ -38,9 +38,12 @@ export function createServer(opts: ServerOptions): http.Server {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    const origin = req.headers.origin ?? '';
+    if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
     if (req.method === 'OPTIONS') {
       res.writeHead(204).end();
       return;
@@ -498,8 +501,8 @@ function handleSSE(
   const status = pipeline.getStatus();
   res.write(`event: status\ndata: ${JSON.stringify(status)}\n\n`);
 
-  // Replay buffered startup logs
-  for (const msg of pipeline.getLogBuffer()) {
+  // Replay the most recent buffered startup logs (capped to avoid flooding slow connections)
+  for (const msg of pipeline.getLogBuffer().slice(-100)) {
     res.write(`event: log\ndata: ${JSON.stringify({ message: msg, timestamp: Date.now() })}\n\n`);
   }
 

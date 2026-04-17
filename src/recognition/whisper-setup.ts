@@ -424,11 +424,28 @@ export async function extractZip(zipPath: string, destDir: string): Promise<void
   if (process.platform === 'win32') {
     await execFileAsync('powershell', [
       '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy', 'Bypass',
       '-Command',
-      `Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force`,
+      'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
+      '--', zipPath, destDir,
     ]);
   } else {
     await execFileAsync('unzip', ['-o', zipPath, '-d', destDir]);
+  }
+
+  // Verify no entry escaped destDir (zip slip guard)
+  const resolvedDest = path.resolve(destDir) + path.sep;
+  const entries = fs.readdirSync(destDir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.resolve(
+      typeof entry.parentPath === 'string' ? entry.parentPath : (entry as unknown as { path: string }).path,
+      entry.name,
+    );
+    if (!entryPath.startsWith(resolvedDest)) {
+      fs.rmSync(destDir, { recursive: true, force: true });
+      throw new Error(`zip slip detected: ${entryPath}`);
+    }
   }
 }
 
