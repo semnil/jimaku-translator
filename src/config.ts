@@ -100,7 +100,8 @@ export function getLocalConfigPath(configPath: string): string {
 export function loadConfig(configPath: string): Config {
   // Prefer config.local.toml (in userData or same directory)
   const localPath = getLocalConfigPath(configPath);
-  const effectivePath = fs.existsSync(localPath) ? localPath : configPath;
+  const hasLocal = fs.existsSync(localPath);
+  const effectivePath = hasLocal ? localPath : configPath;
 
   if (!fs.existsSync(effectivePath)) {
     console.warn(`Config file not found: ${configPath}, using defaults`);
@@ -108,7 +109,18 @@ export function loadConfig(configPath: string): Config {
   }
 
   const raw = fs.readFileSync(effectivePath, 'utf-8');
-  const parsed = parse(raw) as Partial<Config>;
+  let parsed: Partial<Config>;
+  try {
+    parsed = parse(raw) as Partial<Config>;
+  } catch (err) {
+    if (hasLocal) {
+      // config.local.toml is corrupted — fall back to defaults and warn
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[config] Failed to parse ${localPath} (${msg}), falling back to defaults`);
+      return { ...DEFAULTS };
+    }
+    throw err;
+  }
 
   const config: Config = {
     vban: { ...DEFAULTS.vban, ...parsed.vban },

@@ -313,7 +313,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         effectiveGateDb: this.computeEffectiveGateDb(),
         staticGateDb: this.config.audio.rms_gate_db,
         maxGateDb: this.config.audio.adaptive_gate_max_db,
-        rmsDb: this.lastFrameRmsLinear > 0 ? linearToDbfs(this.lastFrameRmsLinear) : -Infinity,
+        rmsDb: this.lastFrameRmsLinear > 0 ? linearToDbfs(this.lastFrameRmsLinear) : -200,
         inSpeech: this.vbanListening ? (this.vad?.inSpeech ?? false) : false,
         gatePass: this.vbanListening ? this.lastFrameGatePass : false,
         lastWhisperSendAt: this.lastWhisperSendAt,
