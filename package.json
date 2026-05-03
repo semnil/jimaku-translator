@@ -11,10 +11,11 @@
     "dev": "tsx src/index.ts",
     "electron": "npm run build && electron .",
     "electron:dev": "tsx src/electron.ts",
-    "dist:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win --publish=never",
-    "dist:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --publish=never && node --env-file-if-exists=.env build/notarize-dmg.cjs",
-    "dist:mac:app": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --dir --publish=never",
-    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --publish=never --config.mac.identity=null --config.mac.notarize=false",
+    "clean:dist": "node build/clean-dist.cjs",
+    "dist:win": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win --publish=never",
+    "dist:mac": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --publish=never && node --env-file-if-exists=.env build/notarize-dmg.cjs",
+    "dist:mac:app": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --dir --publish=never",
+    "dist:mac:unsigned": "npm run clean:dist && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --publish=never --config.mac.identity=null --config.mac.notarize=false",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
@@ -44,13 +45,13 @@
       "node_modules/onnxruntime-node/**/*"
     ],
     "files": [
-      "dist/**/*",
-      "!dist/mac-arm64",
-      "!dist/win-unpacked",
-      "!dist/*.dmg",
-      "!dist/*.exe",
-      "!dist/*.blockmap",
-      "!dist/*.yaml",
+      "dist/*.js",
+      "dist/audio/**/*.js",
+      "dist/obs/**/*.js",
+      "dist/recognition/**/*.js",
+      "dist/subtitle/**/*.js",
+      "dist/ui/**/*",
+      "dist/vban/**/*.js",
       "models/**/*",
       "config.toml",
       "package.json"
@@ -81,6 +82,10 @@
       ],
       "icon": "build/icon.png",
       "category": "public.app-category.utilities",
+      "electronLanguages": [
+        "en",
+        "ja"
+      ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
