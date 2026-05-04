@@ -80,7 +80,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.icns",
       "category": "public.app-category.utilities",
       "electronLanguages": [
         "en",
@@ -91,8 +91,15 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true,
+      "extraResources": [
+        {
+          "from": "build/Assets.car",
+          "to": "Assets.car"
+        }
+      ],
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "jimaku-translator connects to OBS Studio and VBAN audio sources on your local network."
+        "NSLocalNetworkUsageDescription": "jimaku-translator connects to OBS Studio and VBAN audio sources on your local network.",
+        "CFBundleIconName": "AppIcon"
       }
     },
     "afterPack": "build/afterPack.cjs",
