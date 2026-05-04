@@ -28,6 +28,8 @@ export interface PipelineStatus {
     connected: boolean;
     host: string;
     port: number;
+    /** Number of subtitle updates queued for OBS (held by clearDelay). */
+    subtitlePending: number;
   };
   whisper: {
     server: string;
@@ -292,6 +294,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         connected: this.obs?.isConnected() ?? false,
         host: this.config.obs.host,
         port: this.config.obs.port,
+        subtitlePending: this.subtitle?.getPendingCount() ?? 0,
       },
       whisper: this.whisperReachable
         ? {
@@ -399,15 +402,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       ccLanguage: this.config.obs.cc_language,
     });
 
-    // Mirror the subtitle display state to lastResult so the GUI reflects
-    // what's actually on-screen in OBS (gated by clearDelay), not every
-    // Whisper output (which can burst faster than clearDelay when q >= 1).
-    this.subtitle.on('displayed', ({ ja, en }) => {
-      this.lastResult = { ja, en, timestamp: Date.now() };
-    });
-    this.subtitle.on('cleared', () => {
-      this.lastResult = null;
-    });
+    // lastResult is updated at the moment Whisper returns (see processQueue),
+    // so the GUI reflects the recognition pace even while OBS is disconnected
+    // or being held by clearDelay. The subtitle manager's clearDelay only
+    // throttles OBS dispatch, not GUI display.
 
     this.vad = new SileroVad({
       modelPath,
@@ -682,6 +680,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
       if (ja || en) {
         this.log(`[Whisper] ${elapsed}ms | JA: ${ja}`);
         this.log(`[Whisper]          | EN: ${en}`);
+        // Update lastResult at Whisper-receive time so the GUI reflects the
+        // recognition pace immediately, decoupled from OBS dispatch which is
+        // throttled by clearDelay (and skipped while OBS is disconnected).
+        this.lastResult = { ja, en, timestamp: Date.now() };
         await this.subtitle.show(ja, en).catch((e) => {
           this.log(`[OBS] Subtitle update failed: ${e instanceof Error ? e.message : String(e)}`);
         });

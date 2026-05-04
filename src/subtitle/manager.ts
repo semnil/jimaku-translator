@@ -17,12 +17,14 @@ export class SubtitleManager extends EventEmitter<{
   displayed: [{ ja: string; en: string }];
   /** Fired when the active subtitle is cleared (either explicitly or via clearDelay). */
   cleared: [];
+  /** Fired when the count of subtitles waiting for clearDelay changes. */
+  pendingChanged: [number];
 }> {
   private readonly obs: ObsClient;
   private opts: SubtitleManagerOptions;
   private clearTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingLatest: { ja: string; en: string } | null = null;
+  private pendingQueue: { ja: string; en: string }[] = [];
   private nextAllowedShowTime = 0;
 
   constructor(obs: ObsClient, opts: SubtitleManagerOptions) {
@@ -35,11 +37,17 @@ export class SubtitleManager extends EventEmitter<{
     Object.assign(this.opts, opts);
   }
 
+  /** Number of subtitles waiting for clearDelay before being sent to OBS. */
+  getPendingCount(): number {
+    return this.pendingQueue.length;
+  }
+
   /**
    * Display subtitle text. Enforces clearDelay between successive updates:
    * if the previous subtitle has not yet reached its scheduled clear time,
-   * the new content is held and shown once that time elapses. Later calls
-   * during the hold replace the pending content (latest wins).
+   * the new content is enqueued and dispatched in FIFO order, each separated
+   * by clearDelay. Every call is preserved (no coalescing); the queue is
+   * bounded only by upstream backpressure.
    */
   async show(ja: string, en: string): Promise<void> {
     // Whisper translate output can contain \n / \r which would break
@@ -53,18 +61,28 @@ export class SubtitleManager extends EventEmitter<{
     // the subtitle at the same instant (which would produce a visible
     // flicker/double-update when clearDelay expires exactly between them).
     if (wait > 0 || this.pendingTimer) {
-      this.pendingLatest = { ja, en };
+      this.pendingQueue.push({ ja, en });
+      this.emit('pendingChanged', this.pendingQueue.length);
       if (!this.pendingTimer) {
-        this.pendingTimer = setTimeout(() => {
-          this.pendingTimer = null;
-          const latest = this.pendingLatest;
-          this.pendingLatest = null;
-          if (latest) void this.showNow(latest.ja, latest.en).catch(() => {});
-        }, Math.max(0, wait));
+        this.pendingTimer = setTimeout(() => this.drainPending(), Math.max(0, wait));
       }
       return;
     }
     return this.showNow(ja, en);
+  }
+
+  private drainPending(): void {
+    this.pendingTimer = null;
+    const next = this.pendingQueue.shift();
+    if (!next) return;
+    this.emit('pendingChanged', this.pendingQueue.length);
+    void this.showNow(next.ja, next.en)
+      .catch(() => {})
+      .finally(() => {
+        if (this.pendingQueue.length === 0) return;
+        const wait = Math.max(0, this.nextAllowedShowTime - Date.now());
+        this.pendingTimer = setTimeout(() => this.drainPending(), wait);
+      });
   }
 
   private async showNow(ja: string, en: string): Promise<void> {
@@ -100,7 +118,10 @@ export class SubtitleManager extends EventEmitter<{
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
       this.pendingTimer = null;
-      this.pendingLatest = null;
+    }
+    if (this.pendingQueue.length > 0) {
+      this.pendingQueue = [];
+      this.emit('pendingChanged', 0);
     }
     this.nextAllowedShowTime = 0;
     this.emit('cleared');

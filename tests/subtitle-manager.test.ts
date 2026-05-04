@@ -58,44 +58,100 @@ describe('SubtitleManager', () => {
     expect(obs.updateSubtitle).not.toHaveBeenCalled();
   });
 
-  it('rapid successive shows: second update waits for clearDelay', async () => {
+  it('rapid successive shows: every update dispatched in FIFO order, separated by clearDelay', async () => {
     vi.useFakeTimers();
     try {
       const obs = mockObs();
       const mgr = new SubtitleManager(obs as any, { clearDelay: 6, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
 
       await mgr.show('A', 'A');
-      // First update: immediate
       expect(obs.updateSubtitle).toHaveBeenCalledTimes(1);
       expect(obs.updateSubtitle).toHaveBeenLastCalledWith('A', 'A');
+      expect(mgr.getPendingCount()).toBe(0);
 
-      // Simulate q>=1 burst: B arrives 500ms later while A is still active
+      // B arrives 500ms later while A is still active — enqueued, not coalesced
       await vi.advanceTimersByTimeAsync(500);
       await mgr.show('B', 'B');
-      // B must not have been displayed yet
       expect(obs.updateSubtitle).toHaveBeenCalledTimes(1);
+      expect(mgr.getPendingCount()).toBe(1);
 
-      // C arrives another 500ms later — should replace pending B, not display
+      // C arrives another 500ms later — also enqueued, B is preserved
       await vi.advanceTimersByTimeAsync(500);
       await mgr.show('C', 'C');
       expect(obs.updateSubtitle).toHaveBeenCalledTimes(1);
+      expect(mgr.getPendingCount()).toBe(2);
 
-      // Just before clearDelay — still only A shown
-      await vi.advanceTimersByTimeAsync(4900);
-      expect(obs.updateSubtitle).toHaveBeenCalledTimes(1);
-
-      // After clearDelay from A's display (total 6000ms): C displayed (latest wins)
-      await vi.advanceTimersByTimeAsync(200);
+      // After clearDelay from A: B is sent (FIFO), C still pending
+      await vi.advanceTimersByTimeAsync(5100);
       expect(obs.updateSubtitle).toHaveBeenCalledTimes(2);
-      expect(obs.updateSubtitle).toHaveBeenLastCalledWith('C', 'C');
+      expect(obs.updateSubtitle).toHaveBeenLastCalledWith('B', 'B');
+      expect(mgr.getPendingCount()).toBe(1);
 
-      // D arrives 1s after C — must wait another 5s
+      // After another clearDelay: C is sent
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(obs.updateSubtitle).toHaveBeenCalledTimes(3);
+      expect(obs.updateSubtitle).toHaveBeenLastCalledWith('C', 'C');
+      expect(mgr.getPendingCount()).toBe(0);
+
+      // D arrives 1s after C displayed — queued, not coalesced
       await vi.advanceTimersByTimeAsync(1000);
       await mgr.show('D', 'D');
-      expect(obs.updateSubtitle).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(5100);
       expect(obs.updateSubtitle).toHaveBeenCalledTimes(3);
+      expect(mgr.getPendingCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(obs.updateSubtitle).toHaveBeenCalledTimes(4);
       expect(obs.updateSubtitle).toHaveBeenLastCalledWith('D', 'D');
+      expect(mgr.getPendingCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('emits pendingChanged when queue grows and drains', async () => {
+    vi.useFakeTimers();
+    try {
+      const obs = mockObs();
+      const mgr = new SubtitleManager(obs as any, { clearDelay: 5, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+      const events: number[] = [];
+      mgr.on('pendingChanged', (n) => events.push(n));
+
+      await mgr.show('A', 'A');
+      // A displayed immediately — no pendingChanged yet
+      expect(events).toEqual([]);
+
+      await mgr.show('B', 'B');
+      await mgr.show('C', 'C');
+      expect(events).toEqual([1, 2]);
+
+      // Drain B
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(events).toEqual([1, 2, 1]);
+
+      // Drain C
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(events).toEqual([1, 2, 1, 0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clear() flushes pending queue and emits pendingChanged 0', async () => {
+    vi.useFakeTimers();
+    try {
+      const obs = mockObs();
+      const mgr = new SubtitleManager(obs as any, { clearDelay: 5, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+      const events: number[] = [];
+      mgr.on('pendingChanged', (n) => events.push(n));
+
+      await mgr.show('A', 'A');
+      await mgr.show('B', 'B');
+      await mgr.show('C', 'C');
+      expect(mgr.getPendingCount()).toBe(2);
+
+      await mgr.clear();
+      expect(mgr.getPendingCount()).toBe(0);
+      // Last pendingChanged event must be 0
+      expect(events.at(-1)).toBe(0);
     } finally {
       vi.useRealTimers();
     }

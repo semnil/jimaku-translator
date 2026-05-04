@@ -116,6 +116,8 @@ config.toml             デフォルト設定
 - **onnxruntime-node は asarUnpack**: ネイティブ `.node` バイナリは asar 内から読めないため `asarUnpack` で展開
 - **多重起動防止**: `app.requestSingleInstanceLock()` で単一インスタンスを保証。2 回目の起動は既存ウィンドウをフォーカス
 - **OBS 字幕エラーは非致命的**: `subtitle.show()` の失敗は OBS 接続失敗・推論失敗と分離してログ出力。推論結果は保持され GUI に表示される
+- **字幕送信 queue は FIFO 全保持**: [src/subtitle/manager.ts](src/subtitle/manager.ts) の `pendingQueue` は `clearDelay` 中に到着した認識結果を破棄せず FIFO 順に積み、`drainPending()` で `clearDelay` 間隔ごとに 1 件ずつ OBS へ送信。連続発話の取りこぼしを防ぐため latest-wins ではなく全保持を採用。queue 上限はなく、上流の `MAX_QUEUE = 3` (推論キュー) で実質的に絞られる。`getPendingCount()` と `'pendingChanged'` イベントで queue 残数を外部公開し、GUI の OBS カードに「OBS 送信待ち: N」として表示。OBS 切断中も queue は通常通り積まれ、`showNow()` は `obs.isConnected()` 偽の枝で OBS 通信をスキップしながら `clearDelay` を消化する (空回りなので副作用なし) — 切断時の queue クリアや no-op は採用しない方針 (「間引かず確実に送信」を文字通り守るため)
+- **Last Recognition は Whisper レスポンス時点で更新**: GUI の `lastResult` は `subtitle.displayed/cleared` イベントではなく、[src/pipeline.ts](src/pipeline.ts) `processQueue()` で whisper レスポンス取得直後に直接セット。OBS 切断中・字幕送信 queue 滞留中も GUI に認識結果が即時反映される。`subtitle` の `clearDelay` は OBS 字幕の表示時間制御専用で GUI とは独立。`lastResult` のクリアは `pipeline.stop()` のみ (subtitle 'cleared' では消さない)
 - **GUI 折りたたみ + ウィンドウ高さ追従**: Configuration 全体・各セクション・Log パネルが折りたたみ可能。状態は `localStorage` に永続化。折りたたみ時に Electron ウィンドウ高さをコンテンツに追従させ、展開時は保存された最大高さを上限として拡大
 - **UI 多言語対応 (EN/JA)**: `data-i18n` 属性で翻訳キーを指定。言語は `navigator.language` から自動判定、`config.local.toml` の `[ui] language` で上書き可能。「Status」「Last Recognition」は意図的に英語固定
 - **macOS ウィンドウ前面表示**: `show: false` で作成し `ready-to-show` イベントで `show()` + `focus()`。`pipeline.start()` の await 中にフォーカスが失われても確実に前面表示

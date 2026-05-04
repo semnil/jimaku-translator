@@ -63,6 +63,14 @@ h2 {
 .status-hint:hover { color: #fcd34d; }
 .status-hint:focus { outline: 2px solid #fbbf24; outline-offset: 2px; }
 
+.status-substat {
+  display: block;
+  font-size: 11px;
+  color: #b0b0d0;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
 .status-card .value {
   font-size: 16px;
   font-weight: 600;
@@ -531,6 +539,9 @@ button:focus-visible {
         <span class="indicator off" id="obs-indicator" aria-hidden="true"></span>
         <span id="obs-status">--</span>
       </div>
+      <div class="status-substat" id="obs-pending" style="display:none;">
+        <span data-i18n="obs_pending_label">Send pending:</span> <span id="obs-pending-count">0</span>
+      </div>
     </div>
     <div class="status-card">
       <div class="label">Whisper</div>
@@ -772,6 +783,7 @@ button:focus-visible {
       status_offline: 'offline', status_connected: 'connected', status_disconnected: 'disconnected',
       status_ready: 'ready', status_unreachable: 'unreachable', status_inferring: 'inferring...',
       status_queue_suffix: ' (q={0})',
+      obs_pending_label: 'Send pending:',
       whisper_unreachable_hint: 'Open Whisper section to download',
       whisper_reason_no_binary: 'Whisper binary not installed — click to download',
       whisper_reason_no_model: 'Whisper model not installed — click to download',
@@ -843,6 +855,7 @@ button:focus-visible {
       status_offline: 'オフライン', status_connected: '接続済み', status_disconnected: '切断',
       status_ready: '待機中', status_unreachable: '到達不可', status_inferring: '推論中...',
       status_queue_suffix: ' (待ち {0})',
+      obs_pending_label: 'OBS 送信待ち:',
       whisper_unreachable_hint: 'Whisper セクションでダウンロード',
       whisper_reason_no_binary: 'Whisper バイナリ未インストール — クリックでダウンロード',
       whisper_reason_no_model: 'Whisper モデル未インストール — クリックでダウンロード',
@@ -1252,6 +1265,16 @@ button:focus-visible {
     setIndicator('obs-indicator', s.obs.connected);
     document.getElementById('obs-status').textContent =
       s.obs.connected ? t('status_connected') : t('status_disconnected');
+    var obsPending = (s.obs && typeof s.obs.subtitlePending === 'number') ? s.obs.subtitlePending : 0;
+    var obsPendingEl = document.getElementById('obs-pending');
+    if (obsPendingEl) {
+      if (obsPending > 0) {
+        obsPendingEl.style.display = '';
+        document.getElementById('obs-pending-count').textContent = obsPending;
+      } else {
+        obsPendingEl.style.display = 'none';
+      }
+    }
 
     // Whisper
     setIndicator('whisper-indicator', s.whisper.reachable);
