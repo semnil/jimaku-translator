@@ -163,4 +163,63 @@ describe('SubtitleManager', () => {
     await mgr.clear();
     expect(obs.clearSubtitle).toHaveBeenCalled();
   });
+
+  it("'displayed' fires with seq when OBS is connected", async () => {
+    const obs = mockObs();
+    const mgr = new SubtitleManager(obs as any, { clearDelay: 10, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+    const events: (number | undefined)[] = [];
+    mgr.on('displayed', ({ seq }) => events.push(seq));
+
+    await mgr.show('A', 'A', 7);
+    expect(events).toEqual([7]);
+  });
+
+  it("'displayed' still fires when OBS is disconnected (handler-completed marker)", async () => {
+    const obs = mockObs();
+    obs.isConnected.mockReturnValue(false);
+    const mgr = new SubtitleManager(obs as any, { clearDelay: 10, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+    const events: (number | undefined)[] = [];
+    mgr.on('displayed', ({ seq }) => events.push(seq));
+
+    await mgr.show('A', 'A', 3);
+    expect(events).toEqual([3]);
+    expect(obs.updateSubtitle).not.toHaveBeenCalled();
+  });
+
+  it("'displayed' still fires when updateSubtitle throws (e.g. missing source)", async () => {
+    const obs = mockObs();
+    obs.updateSubtitle.mockRejectedValueOnce(new Error('No source was found by the name of `字幕 (英語)`'));
+    const mgr = new SubtitleManager(obs as any, { clearDelay: 10, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+    const events: (number | undefined)[] = [];
+    mgr.on('displayed', ({ seq }) => events.push(seq));
+
+    await expect(mgr.show('A', 'A', 5)).rejects.toThrow(/No source was found/);
+    // Marker fires even though OBS update failed — the dispatch attempt completed.
+    expect(events).toEqual([5]);
+  });
+
+  it('seq is preserved through pendingQueue when clearDelay holds the next show', async () => {
+    vi.useFakeTimers();
+    try {
+      const obs = mockObs();
+      const mgr = new SubtitleManager(obs as any, { clearDelay: 5, charsPerLine: 0, closedCaption: false, ccLanguage: 'ja' as const });
+      const seqs: (number | undefined)[] = [];
+      mgr.on('displayed', ({ seq }) => seqs.push(seq));
+
+      await mgr.show('A', 'A', 1);
+      await mgr.show('B', 'B', 2);
+      await mgr.show('C', 'C', 3);
+
+      // A dispatched immediately; B and C queued
+      expect(seqs).toEqual([1]);
+
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(seqs).toEqual([1, 2]);
+
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(seqs).toEqual([1, 2, 3]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -171,7 +171,10 @@ h2 {
   border-left: 2px solid #2a2a4a;
   padding-left: 10px;
 }
-.result-entry.latest { border-left-color: #6366f1; }
+/* Green bar = the most recently dispatched entry (seq === lastDispatchedSeq).
+ * Older dispatched entries revert to gray so the marker always points at the
+ * single message whose handler just completed. */
+.result-entry.dispatched { border-left-color: #22c55e; }
 
 .result-entry .ts {
   font-size: 10px;
@@ -1055,6 +1058,7 @@ button:focus-visible {
   const resultPanel = document.getElementById('result-panel');
   const toast = document.getElementById('toast');
   var lastResultJa = '', lastResultEn = '';
+  var lastDispatchedSeq = 0;
   var whisperConfig = { binary: '', model: '', binary_variant: '', model_name: '' };
   var activeDownloads = {};
   var savedConfig = null; // snapshot of config at load time
@@ -1332,19 +1336,28 @@ button:focus-visible {
       }
     }
 
+    var newDispatchedSeq = (s.obs && typeof s.obs.lastDispatchedSeq === 'number')
+      ? s.obs.lastDispatchedSeq : 0;
+    var dispatchedAdvanced = newDispatchedSeq !== lastDispatchedSeq;
+    lastDispatchedSeq = newDispatchedSeq;
+
     if (s.lastResult && s.lastResult.ja &&
         (s.lastResult.ja !== lastResultJa || s.lastResult.en !== lastResultEn)) {
       lastResultJa = s.lastResult.ja;
       lastResultEn = s.lastResult.en;
-      pushResultHistory(lastResultJa, lastResultEn, s.lastResult.timestamp || Date.now());
+      var seq = (typeof s.lastResult.seq === 'number') ? s.lastResult.seq : 0;
+      pushResultHistory(lastResultJa, lastResultEn, s.lastResult.timestamp || Date.now(), seq);
+      renderResultHistory();
+    } else if (dispatchedAdvanced && resultHistory.length > 0) {
+      // Repaint to flip newly-dispatched entries from gray to green bars.
       renderResultHistory();
     }
   }
 
   var resultHistory = [];
   var MAX_RESULT_HISTORY = 3;
-  function pushResultHistory(ja, en, ts) {
-    resultHistory.unshift({ ja: ja, en: en, ts: ts });
+  function pushResultHistory(ja, en, ts, seq) {
+    resultHistory.unshift({ ja: ja, en: en, ts: ts, seq: seq || 0 });
     if (resultHistory.length > MAX_RESULT_HISTORY) resultHistory.length = MAX_RESULT_HISTORY;
   }
   function renderResultHistory() {
@@ -1360,7 +1373,10 @@ button:focus-visible {
       var hh = String(d.getHours()).padStart(2, '0');
       var mm = String(d.getMinutes()).padStart(2, '0');
       var ss = String(d.getSeconds()).padStart(2, '0');
-      html += '<div class="result-entry' + (i === 0 ? ' latest' : '') + '">'
+      // Only the entry whose seq matches the latest dispatch carries the bar;
+      // older dispatched entries fall back to gray.
+      var dispatched = r.seq > 0 && r.seq === lastDispatchedSeq;
+      html += '<div class="result-entry' + (dispatched ? ' dispatched' : '') + '">'
         + '<div class="ts">' + hh + ':' + mm + ':' + ss + '</div>'
         + '<div class="lang">' + escapeHtml(dict.lang_ja) + '</div>'
         + '<div class="text ja">' + escapeHtml(r.ja) + '</div>'

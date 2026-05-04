@@ -13,8 +13,11 @@ export interface SubtitleManagerOptions {
 }
 
 export class SubtitleManager extends EventEmitter<{
-  /** Fired when a subtitle has been (or would have been) pushed to OBS. */
-  displayed: [{ ja: string; en: string }];
+  /** Fired exactly once after `show()` finishes processing a subtitle —
+   * regardless of whether OBS was connected or `updateSubtitle()` threw.
+   * Acts as a "dispatch attempt completed" marker so the GUI can flag
+   * entries whose handler has run, separately from queue-pending ones. */
+  displayed: [{ ja: string; en: string; seq?: number }];
   /** Fired when the active subtitle is cleared (either explicitly or via clearDelay). */
   cleared: [];
   /** Fired when the count of subtitles waiting for clearDelay changes. */
@@ -24,7 +27,7 @@ export class SubtitleManager extends EventEmitter<{
   private opts: SubtitleManagerOptions;
   private clearTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingQueue: { ja: string; en: string }[] = [];
+  private pendingQueue: { ja: string; en: string; seq?: number }[] = [];
   private nextAllowedShowTime = 0;
 
   constructor(obs: ObsClient, opts: SubtitleManagerOptions) {
@@ -48,8 +51,12 @@ export class SubtitleManager extends EventEmitter<{
    * the new content is enqueued and dispatched in FIFO order, each separated
    * by clearDelay. Every call is preserved (no coalescing); the queue is
    * bounded only by upstream backpressure.
+   *
+   * @param seq optional sequence number forwarded to the 'displayed' event
+   *            so callers can correlate dispatches with their source records
+   *            (e.g. to mark a result as sent in the GUI history).
    */
-  async show(ja: string, en: string): Promise<void> {
+  async show(ja: string, en: string, seq?: number): Promise<void> {
     // Whisper translate output can contain \n / \r which would break
     // single-line OBS text sources; collapse to spaces before line wrapping.
     ja = ja.replace(/[\r\n]+/g, ' ').trim();
@@ -61,14 +68,14 @@ export class SubtitleManager extends EventEmitter<{
     // the subtitle at the same instant (which would produce a visible
     // flicker/double-update when clearDelay expires exactly between them).
     if (wait > 0 || this.pendingTimer) {
-      this.pendingQueue.push({ ja, en });
+      this.pendingQueue.push({ ja, en, seq });
       this.emit('pendingChanged', this.pendingQueue.length);
       if (!this.pendingTimer) {
         this.pendingTimer = setTimeout(() => this.drainPending(), Math.max(0, wait));
       }
       return;
     }
-    return this.showNow(ja, en);
+    return this.showNow(ja, en, seq);
   }
 
   private drainPending(): void {
@@ -76,7 +83,7 @@ export class SubtitleManager extends EventEmitter<{
     const next = this.pendingQueue.shift();
     if (!next) return;
     this.emit('pendingChanged', this.pendingQueue.length);
-    void this.showNow(next.ja, next.en)
+    void this.showNow(next.ja, next.en, next.seq)
       .catch(() => {})
       .finally(() => {
         if (this.pendingQueue.length === 0) return;
@@ -85,7 +92,7 @@ export class SubtitleManager extends EventEmitter<{
       });
   }
 
-  private async showNow(ja: string, en: string): Promise<void> {
+  private async showNow(ja: string, en: string, seq?: number): Promise<void> {
     this.cancelClear();
 
     // Reserve the slot synchronously so any show() call arriving during the
@@ -96,20 +103,21 @@ export class SubtitleManager extends EventEmitter<{
     const formattedJa = this.breakLines(ja);
     const formattedEn = this.breakLines(en);
 
-    if (!this.obs.isConnected()) {
-      this.emit('displayed', { ja, en });
+    // Always emit 'displayed' once the OBS attempt has run (success, failure,
+    // or skipped due to disconnect). The event is a "handler completed"
+    // marker — actual OBS errors are surfaced via the rejected promise so
+    // the caller can log them.
+    try {
+      if (this.obs.isConnected()) {
+        await this.obs.updateSubtitle(formattedJa, formattedEn);
+        if (this.opts.closedCaption) {
+          await this.obs.sendCaption(this.opts.ccLanguage === 'en' ? en : ja);
+        }
+      }
+    } finally {
+      this.emit('displayed', { ja, en, seq });
       this.scheduleClear();
-      return;
     }
-
-    await this.obs.updateSubtitle(formattedJa, formattedEn);
-
-    if (this.opts.closedCaption) {
-      await this.obs.sendCaption(this.opts.ccLanguage === 'en' ? en : ja);
-    }
-
-    this.emit('displayed', { ja, en });
-    this.scheduleClear();
   }
 
   /** Immediately clear subtitles. */

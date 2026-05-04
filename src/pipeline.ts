@@ -30,6 +30,9 @@ export interface PipelineStatus {
     port: number;
     /** Number of subtitle updates queued for OBS (held by clearDelay). */
     subtitlePending: number;
+    /** Highest result seq dispatched to OBS so far. 0 = none. Used by the
+     *  GUI to mark history entries whose subtitle has been sent. */
+    lastDispatchedSeq: number;
   };
   whisper: {
     server: string;
@@ -43,6 +46,10 @@ export interface PipelineStatus {
     ja: string;
     en: string;
     timestamp: number;
+    /** Monotonic sequence number assigned at Whisper-receive time. The GUI
+     *  pairs this with `obs.lastDispatchedSeq` to mark history entries that
+     *  have already been sent to OBS. */
+    seq: number;
   } | null;
   audio: {
     /** Effective RMS gate in dBFS (max of static + adaptive, clamped by ceiling). */
@@ -107,6 +114,10 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
   private inferring = false;
   private inferQueue: SpeechSegment[] = [];
   private lastLogTime = 0;
+  /** Monotonic counter incremented for each non-empty Whisper result. */
+  private resultSeq = 0;
+  /** Highest seq for which subtitle was successfully dispatched to OBS. */
+  private lastDispatchedSeq = 0;
 
   private vbanListening = false;
   private lastStreamName = '';
@@ -295,6 +306,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         host: this.config.obs.host,
         port: this.config.obs.port,
         subtitlePending: this.subtitle?.getPendingCount() ?? 0,
+        lastDispatchedSeq: this.lastDispatchedSeq,
       },
       whisper: this.whisperReachable
         ? {
@@ -406,6 +418,15 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     // so the GUI reflects the recognition pace even while OBS is disconnected
     // or being held by clearDelay. The subtitle manager's clearDelay only
     // throttles OBS dispatch, not GUI display.
+    //
+    // 'displayed' fires when the dispatch handler finishes (regardless of
+    // OBS connection status or updateSubtitle errors). The GUI uses
+    // lastDispatchedSeq to flag entries whose handler has run.
+    this.subtitle.on('displayed', ({ seq }) => {
+      if (typeof seq === 'number' && seq > this.lastDispatchedSeq) {
+        this.lastDispatchedSeq = seq;
+      }
+    });
 
     this.vad = new SileroVad({
       modelPath,
@@ -645,6 +666,9 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     this.whisperReachable = false;
     this.whisperStarting = false;
     this.whisperPathCache = null;
+    this.resultSeq = 0;
+    this.lastDispatchedSeq = 0;
+    this.lastResult = null;
     this.cancelCapture(new Error('Pipeline stopped'));
     await this.subtitle?.clear().catch(() => {});
     await this.obs?.disconnect();
@@ -683,8 +707,9 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
         // Update lastResult at Whisper-receive time so the GUI reflects the
         // recognition pace immediately, decoupled from OBS dispatch which is
         // throttled by clearDelay (and skipped while OBS is disconnected).
-        this.lastResult = { ja, en, timestamp: Date.now() };
-        await this.subtitle.show(ja, en).catch((e) => {
+        const seq = ++this.resultSeq;
+        this.lastResult = { ja, en, timestamp: Date.now(), seq };
+        await this.subtitle.show(ja, en, seq).catch((e) => {
           this.log(`[OBS] Subtitle update failed: ${e instanceof Error ? e.message : String(e)}`);
         });
       }
