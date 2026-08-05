@@ -36,7 +36,7 @@
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@types/node": "^22.10.0",
-    "electron": "^40.8.5",
+    "electron": "^41.10.3",
     "electron-builder": "^26.15.3",
     "rcedit": "^4.0.1",
     "tsx": "^4.22.4",
