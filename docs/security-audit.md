@@ -292,7 +292,7 @@ jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公�
 | `security set-key-partition-list` | `apple-tool:,apple:` のみを許可。他ツールからのアクセスを遮断 |
 | 未設定時のフォールバック | `MACOS_SIGNING_CERT` 未設定時は `Check Signing Secrets` ステップが `signed=false` を出力し、署名関連ステップが skip。`npm run dist:mac:unsigned` で署名・公証なしの DMG を生成しビルドを継続 |
 | Apple 公証認証情報 | `MACOS_NOTARIZATION_USERNAME` / `MACOS_NOTARIZATION_PASSWORD` / `MACOS_NOTARIZATION_TEAM_ID` を環境変数経由で `dist:mac` に注入。`.env` ファイルは使用せずランナー環境変数のみ |
-| 外部 action のピン留め | `softprops/action-gh-release` はコミット SHA (`9d7c94cfd0a1f3ed45544c887983e9fa900f0564`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止 |
+| 外部 action のピン留め | `ci.yaml` / `release.yaml` の全 `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止 |
 | リリース公開方式 | `draft: true` で常にドラフトとして作成し、手動確認後に公開。誤 push による意図しない公開リリースを防止 |
 
 ## 推奨事項
