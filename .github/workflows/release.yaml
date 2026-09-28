@@ -31,24 +31,24 @@ jobs:
           shopt -s extglob
 
           if [[ "${GITHUB_EVENT_NAME}" != 'push' ]]; then
-            echo 'validTag=false' >> $GITHUB_OUTPUT
+            echo 'validTag=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           tag="${GITHUB_REF_NAME#v}"
           case "${tag}" in
             +([0-9]).+([0-9]).+([0-9]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=false' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+              echo 'validTag=true' >> "$GITHUB_OUTPUT"
+              echo 'prerelease=false' >> "$GITHUB_OUTPUT"
+              echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
               ;;
             +([0-9]).+([0-9]).+([0-9])-@(beta|rc|alpha)*([0-9.]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=true' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+              echo 'validTag=true' >> "$GITHUB_OUTPUT"
+              echo 'prerelease=true' >> "$GITHUB_OUTPUT"
+              echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo 'validTag=false' >> $GITHUB_OUTPUT
+              echo 'validTag=false' >> "$GITHUB_OUTPUT"
               ;;
           esac
 
@@ -147,8 +147,11 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
 
           # Prepend our keychain to the search list so codesign finds the identity
-          security list-keychains -d user -s "$KEYCHAIN_PATH" \
-            $(security list-keychains -d user | sed -e 's/"//g')
+          existing_keychains=()
+          while IFS= read -r keychain; do
+            existing_keychains+=("$keychain")
+          done < <(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "${existing_keychains[@]}"
 
           rm "$RUNNER_TEMP/cert.p12"
 
