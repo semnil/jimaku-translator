@@ -1,7 +1,7 @@
 # セキュリティ監査レポート
 
 **対象**: jimaku-translator v1.0.9
-**日付**: 2026-04-17
+**日付**: 2026-04-17 (「CI/CD (GitHub Actions) のセキュリティ」節の「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行のみ 2026-09-30 に確認)
 **スコープ**: HTTP サーバー (`server.ts`)、Electron メインプロセス (`electron.ts`)、Web UI (`ui/index.html`)、パイプライン (`pipeline.ts`)、音声レベル処理 (`audio/level.ts`)、Whisper プロセス管理 (`whisper-process.ts`)、Whisper セットアップ (`whisper-setup.ts`)、OBS クライアント (`obs/client.ts`)、ビルドフック (`build/afterPack.cjs`)
 
 ## 概要
@@ -282,6 +282,8 @@ jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公�
 | dev 環境 | `app.isPackaged` チェックで更新処理をスキップ。開発中に意図しない更新が走らない |
 
 ## CI/CD (GitHub Actions) のセキュリティ
+
+「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行は 2026-09-30 に、各ワークフローの実物と main のルールセット・Actions の許可ポリシーの現在値で確認した。他の行は 2026-04-17 の監査の記述で、この確認の対象外。
 
 | 項目 | 対策 |
 |------|------|
