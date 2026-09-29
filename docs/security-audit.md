@@ -285,8 +285,8 @@ jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公�
 
 | 項目 | 対策 |
 |------|------|
-| ワークフロートリガ | `v[0-9]+.[0-9]+.[0-9]+` タグ push のみ発火。`check-event` ジョブが正規タグ形式を検証し `validTag` を下流ジョブに伝達 |
-| `permissions` | `contents: write` のみ (リリース作成用)。他の権限は付与しない |
+| ワークフロートリガ | `ci.yaml`: main への push、main 向けの PR、手動 (`workflow_dispatch`)。`release.yaml`: `v[0-9]+.[0-9]+.[0-9]+` / `v[0-9]+.[0-9]+.[0-9]+-*` のタグ push と手動。`check-event` ジョブがタグ push のときだけ正規タグ形式 (`x.y.z` と `x.y.z-(beta\|rc\|alpha)…`) を検証して `validTag` を出し、`create-release` は `validTag == 'true'` のときだけ走る (手動起動と形式外のタグではビルドまでで、リリースは作らない)。`workflow-checks.yml`: PR ごと (`pull_request_target`、既定ブランチの定義で実行)。`workflow-checks-test.yml`: 検査ファイル・テストを変更する PR、同じファイルを変更する main / master への push、手動 |
+| `permissions` | ワークフロー単位で指定し、ジョブ単位の上書きは無い。`ci.yaml` / `workflow-checks.yml` / `workflow-checks-test.yml` は `contents: read`、`release.yaml` は `contents: write` (ドラフトリリース作成用)。他の権限は付与しない |
 | 署名証明書の取り扱い | `MACOS_SIGNING_CERT` は base64 エンコード済み `.p12` を GitHub Secrets に保存。ランナー上で `$RUNNER_TEMP/cert.p12` に復元後、import 完了で即削除 |
 | キーチェーン分離 | 証明書は `$RUNNER_TEMP/app-signing.keychain-db` 専用キーチェーンにインポート。パスワードは `openssl rand -hex 32` で生成。`set-keychain-settings -lut 21600` でロック時間を制限。ランナー終了時に破棄 |
 | `security set-key-partition-list` | `apple-tool:,apple:` のみを許可。他ツールからのアクセスを遮断 |
