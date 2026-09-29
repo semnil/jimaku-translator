@@ -292,7 +292,7 @@ jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公�
 | `security set-key-partition-list` | `apple-tool:,apple:` のみを許可。他ツールからのアクセスを遮断 |
 | 未設定時のフォールバック | `MACOS_SIGNING_CERT` 未設定時は `Check Signing Secrets` ステップが `signed=false` を出力し、署名関連ステップが skip。`npm run dist:mac:unsigned` で署名・公証なしの DMG を生成しビルドを継続 |
 | Apple 公証認証情報 | `MACOS_NOTARIZATION_USERNAME` / `MACOS_NOTARIZATION_PASSWORD` / `MACOS_NOTARIZATION_TEAM_ID` を環境変数経由で `dist:mac` に注入。`.env` ファイルは使用せずランナー環境変数のみ |
-| 外部 action のピン留め | `ci.yaml` / `release.yaml` の全 `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止。`workflow-checks.yml` が全 PR でこの形式を検査する (`pull_request_target` で既定ブランチの定義を使い、PR のワークフロー・action ファイルは API でデータとして取得して yq で読むだけ。PR のコードは checkout も実行もしない) |
+| 外部 action のピン留め | `ci.yaml` / `release.yaml` / `workflow-checks-test.yml` の `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止。`workflow-checks.yml` (main の必須チェック `action-pins`。ベースブランチへの追随を要求し、バイパスなし) が PR ごとにこの形式を検査する (`pull_request_target` で既定ブランチの定義を使い、PR のワークフロー・action ファイルは API でデータとして取得して yq で読むだけ。PR のコードは checkout も実行もしない)。同一リポジトリの Action はステップでは `$/` で参照させ (ステップの `./` は runner の作業領域に対して解決されるため拒否)、ローカル参照のパスの別表記と参照先までの経路上のシンボリックリンク・サブモジュールを拒否し、検査ファイル自身が既定ブランチと一致しない PR を失敗させる。検査の回帰テストは `.github/tests/workflow-checks-test.sh` (`workflow-checks-test.yml` が実行)。`pull_request_target` は `workflow-checks.yml` を対象とした Actions の許可ポリシーで許可している |
 | リリース公開方式 | `draft: true` で常にドラフトとして作成し、手動確認後に公開。誤 push による意図しない公開リリースを防止 |
 
 ## 推奨事項
