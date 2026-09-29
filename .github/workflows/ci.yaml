@@ -35,3 +35,5 @@ jobs:
 
       - name: Run Tests ✅
         run: npm test
+  probe-job:
+    uses: ./vendor/probe-sub/.github/workflows/r.yml
