@@ -1,7 +1,7 @@
 # セキュリティ監査レポート
 
 **対象**: jimaku-translator v1.0.9
-**日付**: 2026-04-17
+**日付**: 2026-04-17 (「CI/CD (GitHub Actions) のセキュリティ」節の「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行のみ 2026-09-30 に確認)
 **スコープ**: HTTP サーバー (`server.ts`)、Electron メインプロセス (`electron.ts`)、Web UI (`ui/index.html`)、パイプライン (`pipeline.ts`)、音声レベル処理 (`audio/level.ts`)、Whisper プロセス管理 (`whisper-process.ts`)、Whisper セットアップ (`whisper-setup.ts`)、OBS クライアント (`obs/client.ts`)、ビルドフック (`build/afterPack.cjs`)
 
 ## 概要
@@ -283,16 +283,18 @@ jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公�
 
 ## CI/CD (GitHub Actions) のセキュリティ
 
+「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行は 2026-09-30 に、各ワークフローの実物と main のルールセット・Actions の許可ポリシーの現在値で確認した。他の行は 2026-04-17 の監査の記述で、この確認の対象外。
+
 | 項目 | 対策 |
 |------|------|
-| ワークフロートリガ | `v[0-9]+.[0-9]+.[0-9]+` タグ push のみ発火。`check-event` ジョブが正規タグ形式を検証し `validTag` を下流ジョブに伝達 |
-| `permissions` | `contents: write` のみ (リリース作成用)。他の権限は付与しない |
+| ワークフロートリガ | `ci.yaml`: main への push、main 向けの PR、手動 (`workflow_dispatch`)。`release.yaml`: `v[0-9]+.[0-9]+.[0-9]+` / `v[0-9]+.[0-9]+.[0-9]+-*` のタグ push と手動。`check-event` ジョブがタグ push のときだけ正規タグ形式 (`x.y.z` と `x.y.z-(beta\|rc\|alpha)…`) を検証して `validTag` を出し、`create-release` は `validTag == 'true'` のときだけ走る (手動起動と形式外のタグではビルドまでで、リリースは作らない)。`workflow-checks.yml`: PR ごと (`pull_request_target`、既定ブランチの定義で実行)。`workflow-checks-test.yml`: 検査ファイル・テストを変更する PR、同じファイルを変更する main / master への push、手動 |
+| `permissions` | ワークフロー単位で指定し、ジョブ単位の上書きは無い。`ci.yaml` / `workflow-checks.yml` / `workflow-checks-test.yml` は `contents: read`、`release.yaml` は `contents: write` (ドラフトリリース作成用)。他の権限は付与しない |
 | 署名証明書の取り扱い | `MACOS_SIGNING_CERT` は base64 エンコード済み `.p12` を GitHub Secrets に保存。ランナー上で `$RUNNER_TEMP/cert.p12` に復元後、import 完了で即削除 |
 | キーチェーン分離 | 証明書は `$RUNNER_TEMP/app-signing.keychain-db` 専用キーチェーンにインポート。パスワードは `openssl rand -hex 32` で生成。`set-keychain-settings -lut 21600` でロック時間を制限。ランナー終了時に破棄 |
 | `security set-key-partition-list` | `apple-tool:,apple:` のみを許可。他ツールからのアクセスを遮断 |
 | 未設定時のフォールバック | `MACOS_SIGNING_CERT` 未設定時は `Check Signing Secrets` ステップが `signed=false` を出力し、署名関連ステップが skip。`npm run dist:mac:unsigned` で署名・公証なしの DMG を生成しビルドを継続 |
 | Apple 公証認証情報 | `MACOS_NOTARIZATION_USERNAME` / `MACOS_NOTARIZATION_PASSWORD` / `MACOS_NOTARIZATION_TEAM_ID` を環境変数経由で `dist:mac` に注入。`.env` ファイルは使用せずランナー環境変数のみ |
-| 外部 action のピン留め | `ci.yaml` / `release.yaml` の全 `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止。`workflow-checks.yml` が全 PR でこの形式を検査する (`pull_request_target` で既定ブランチの定義を使い、PR のワークフロー・action ファイルは API でデータとして取得して yq で読むだけ。PR のコードは checkout も実行もしない) |
+| 外部 action のピン留め | `ci.yaml` / `release.yaml` / `workflow-checks-test.yml` の `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止。`workflow-checks.yml` (main の必須チェック `action-pins`。ベースブランチへの追随を要求し、バイパスなし) が PR ごとにこの形式を検査する (`pull_request_target` で既定ブランチの定義を使い、PR のワークフロー・action ファイルは API でデータとして取得して yq で読むだけ。PR のコードは checkout も実行もしない)。同一リポジトリの Action はステップでは `$/` で参照させ (ステップの `./` は runner の作業領域に対して解決されるため拒否)、ローカル参照のパスの別表記と参照先までの経路上のシンボリックリンク・サブモジュールを拒否し、検査ファイル自身が既定ブランチと一致しない PR を失敗させる。検査の回帰テストは `.github/tests/workflow-checks-test.sh` (`workflow-checks-test.yml` が実行)。`pull_request_target` は `workflow-checks.yml` を対象とした Actions の許可ポリシーで許可している |
 | リリース公開方式 | `draft: true` で常にドラフトとして作成し、手動確認後に公開。誤 push による意図しない公開リリースを防止 |
 
 ## 推奨事項
