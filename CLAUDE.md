@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-## Project
+## プロジェクト
 
 jimaku-translator — OBS リアルタイム字幕システム。VBAN (UDP) で OBS の音声を受信し、Whisper で JA 認識 + EN 翻訳を行い、OBS WebSocket v5 で字幕テキストソースを更新する Electron アプリケーション。GUI でステータス表示・設定変更が可能。
 
-## Stack
+## 技術スタック
 
 - Node.js 20+, TypeScript 5.7, CJS (CommonJS 出力)
 - Electron 40 (GUI ウィンドウ + パッケージング)
@@ -16,7 +16,7 @@ jimaku-translator — OBS リアルタイム字幕システム。VBAN (UDP) で 
 - electron-builder (Windows/macOS パッケージング)
 - 外部プロセス: whisper.cpp server (HTTP API)
 
-## Commands
+## コマンド
 
 ```bash
 npm run dev           # CLI モード (tsx + GUI サーバー)
@@ -31,7 +31,7 @@ npm run test:watch    # vitest ウォッチモード
 npm run test:e2e      # Playwright E2E テスト
 ```
 
-## Architecture
+## アーキテクチャ
 
 ```mermaid
 graph LR
@@ -47,7 +47,7 @@ graph LR
   UI --> electron["electron.ts (BrowserWindow)"]
 ```
 
-## Directory Layout
+## ディレクトリ構成
 
 ```
 src/
@@ -83,14 +83,14 @@ docs/
 config.toml             デフォルト設定
 ```
 
-## Conventions
+## 規約
 
 - import には `.js` 拡張子を付ける (CJS + Node16 moduleResolution で必要)
 - ユニットテストは `tests/` に `*.test.ts`、E2E テストは `e2e/` に配置
 - エラーは握りつぶさず、パイプラインの安全な箇所でキャッチしてログ出力
 - OBS WebSocket 呼び出しは `isConnected()` ガード必須
 
-## Key Design Decisions
+## 主要な設計判断
 
 - **VBAN パーサーは自前実装**: 28B 固定ヘッダで単純。外部ライブラリ不使用。`node:dgram` のみ
 - **リサンプルは受信側**: obs-vban で 16kHz 出力も可能だが、48kHz 送信 + アプリ側変換の方が柔軟
@@ -148,11 +148,11 @@ HTTP サーバー (`127.0.0.1:9880`) で以下を提供:
 - `POST /api/capture` — 16kHz mono WAV キャプチャ (最大 30 秒)
 - `GET /api/events` — SSE ストリーム (status + log + download-progress イベント)
 
-## Config
+## 設定
 
 `config.toml` (デフォルト値は `src/config.ts` の `DEFAULTS` に定義)。バリデーションは `validateConfig()` で実施 (export 済み)。データ保存先の詳細は README.md を参照。
 
-## External Dependencies
+## 外部依存
 
 - **obs-vban** (OBS PC 側): https://github.com/norihiro/obs-vban
 - **whisper.cpp** (字幕 PC 側): `whisper-server -m ggml-large-v3.bin --host 127.0.0.1 --port 8080`
