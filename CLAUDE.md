@@ -1,22 +1,24 @@
 # CLAUDE.md
 
-## Project
+## プロジェクト
 
 jimaku-translator — OBS リアルタイム字幕システム。VBAN (UDP) で OBS の音声を受信し、Whisper で JA 認識 + EN 翻訳を行い、OBS WebSocket v5 で字幕テキストソースを更新する Electron アプリケーション。GUI でステータス表示・設定変更が可能。
 
-## Stack
+## 技術スタック
 
-- Node.js 20+, TypeScript 5.7, CJS (CommonJS 出力)
-- Electron 40 (GUI ウィンドウ + パッケージング)
-- obs-websocket-js ^5.0 (OBS WebSocket v5 クライアント)
-- onnxruntime-node ^1.17 (Silero VAD)
+各パッケージのバージョンは `package.json` を参照。
+
+- Node.js 20+, TypeScript, CJS (CommonJS 出力)
+- Electron (GUI ウィンドウ + パッケージング)
+- obs-websocket-js (OBS WebSocket v5 クライアント)
+- onnxruntime-node (Silero VAD)
 - smol-toml (設定ファイル読み込み)
-- vitest 2.x (ユニットテスト)
+- vitest (ユニットテスト)
 - Playwright (E2E テスト)
 - electron-builder (Windows/macOS パッケージング)
 - 外部プロセス: whisper.cpp server (HTTP API)
 
-## Commands
+## コマンド
 
 ```bash
 npm run dev           # CLI モード (tsx + GUI サーバー)
@@ -31,7 +33,7 @@ npm run test:watch    # vitest ウォッチモード
 npm run test:e2e      # Playwright E2E テスト
 ```
 
-## Architecture
+## アーキテクチャ
 
 ```mermaid
 graph LR
@@ -47,7 +49,7 @@ graph LR
   UI --> electron["electron.ts (BrowserWindow)"]
 ```
 
-## Directory Layout
+## ディレクトリ構成
 
 ```
 src/
@@ -56,6 +58,7 @@ src/
   pipeline.ts           パイプラインロジック (EventEmitter)
   server.ts             HTTP サーバー (REST API + SSE)
   config.ts             TOML 読み込み + バリデーション
+  updater.ts            electron-updater による自動更新
   ui/
     index.html          Web UI (インライン CSS/JS、ダークテーマ)
   vban/
@@ -65,6 +68,7 @@ src/
     resample.ts         stereo→mono + 48kHz→16kHz (7-tap FIR decimation)
     ring-buffer.ts      INT16 リングバッファ
     vad.ts              Silero VAD v5 ONNX ラッパー (512-sample chunks)
+    level.ts            RMS / dBFS 変換・ノイズフロア追跡・発話セグメント正規化
     wav.ts              INT16 mono PCM → WAV エンコーダ
   recognition/
     whisper-client.ts   whisper.cpp server HTTP クライアント (timeout + retry)
@@ -83,14 +87,14 @@ docs/
 config.toml             デフォルト設定
 ```
 
-## Conventions
+## 規約
 
 - import には `.js` 拡張子を付ける (CJS + Node16 moduleResolution で必要)
 - ユニットテストは `tests/` に `*.test.ts`、E2E テストは `e2e/` に配置
 - エラーは握りつぶさず、パイプラインの安全な箇所でキャッチしてログ出力
 - OBS WebSocket 呼び出しは `isConnected()` ガード必須
 
-## Key Design Decisions
+## 主要な設計判断
 
 - **VBAN パーサーは自前実装**: 28B 固定ヘッダで単純。外部ライブラリ不使用。`node:dgram` のみ
 - **リサンプルは受信側**: obs-vban で 16kHz 出力も可能だが、48kHz 送信 + アプリ側変換の方が柔軟
@@ -104,25 +108,25 @@ config.toml             デフォルト設定
 - **Whisper 推論は逐次実行**: whisper.cpp server はシングルスレッド。並列リクエストは結果を破損するため、transcribe → translate を順次実行
 - **CPU 使用率の抑制**: whisper-server は `--threads` を明示指定 (`config.whisper.threads`、未指定時は [src/recognition/whisper-process.ts](src/recognition/whisper-process.ts) の `resolveThreadsDefault()` がプラットフォーム/バリアントから決定: macOS / Windows GPU バリアント (cublas/cuda/vulkan) は少数スレッド、CPU-only は論理コア数の半分)。Silero VAD の `ort.InferenceSession.create()` は `intraOpNumThreads=1` / `interOpNumThreads=1` / `executionMode: 'sequential'` を指定し、onnxruntime スレッドプールのアイドルスピンを排除
 - **モデルごとの翻訳可否**: `canTranslate` フラグで制御。turbo 系・kotoba 系・anime-whisper は翻訳不可 (distil-whisper ベースで翻訳タスク未保持)。翻訳が必要な場合はオリジナル Whisper モデル (large-v3, medium, small, base) を使用
-- **品質ベースライン**: `tests/fixtures/jp-*.wav` (Kyoko TTS) を用いた内部検証で `medium` モデルが JA 認識・EN 翻訳ともに実用十分。仕様上の問題なし。`large-v3` への引き上げは固有名詞重視の配信用途等でのみ検討
+- **品質ベースライン**: JA 認識の合否は e2e の `Recognition E2E` (`JT_E2E_RECOGNITION=1` で実行) が `tests/fixtures/jp-*.wav` (Kyoko TTS) で判定し、各 fixture で Levenshtein 距離 / 期待文字数 < 0.3 を合格とする。モデルは導入済みのものから `medium` → `large-v3` → `small` → `base` の順で選ぶ
 - **Silero VAD**: 512-sample チャンク + 64-sample コンテキスト (入力 [1, 576])。feedQueue は Promise チェーンで直列化、深さ 4 上限でドロップ、`.catch(() => {})` でチェーン断絶防止。3 秒間の非発話継続で LSTM 隠れ状態を自動リセット (30 秒だと隠れ状態が偏り、RMS が高い区間でも prob が立ち上がらない事象を確認したため短縮)。500ms の pre-speech リングバッファで発話先頭の立ち上がりを補完。`emitSpeech()` 実行ごとに LSTM 状態をリセット (state を持ち越すと次発話の prob が崩壊するため)。母音飽和で prob が崩壊した場合に備え、silence ブランチでも `speechSampleCount >= maxSpeechSamples` で強制分割を行う (continuationRmsFloor で silenceSamples が 0 に固定されても確実に Whisper Dispatch を発火)
-- **認識精度向上のための音声前処理**: (1) RMS ゲート: VAD 前に RMS を計算し `audio.rms_gate_db` (デフォルト -60、上限 -30) 未満なら VAD feed をスキップ。VAD 状態と pre-speech バッファが凍結されるため立ち上がり取りこぼしなし。(2) 発話セグメント正規化: VAD emit 時点で [src/audio/level.ts](src/audio/level.ts) の `normalizeToTarget()` で RMS を測定し `audio.normalize_target_dbfs` (デフォルト -6) まで増幅、最大ゲイン +20 dB でノイズフロア増幅を抑制、減衰は行わない。正規化ターゲットは GUI 非表示で `config.local.toml` のみから変更可能。(3) レベルメーター表示も peak → RMS に変更し、ゲート閾値との直接比較を可能に
+- **認識精度向上のための音声前処理**: (1) RMS ゲート: VAD 前に RMS を計算し `audio.rms_gate_db` (デフォルト -60、上限 -30) 未満なら VAD feed をスキップ (VAD が発話区間中のときはスキップしない)。`audio.adaptive_gate_enabled` (デフォルト false) が真ならノイズフロア + `audio.adaptive_gate_margin_db` までゲートを引き上げ、`audio.adaptive_gate_max_db` で頭打ちにする。VAD 状態と pre-speech バッファが凍結されるため立ち上がり取りこぼしなし。(2) 発話セグメント正規化: VAD emit 時点で [src/audio/level.ts](src/audio/level.ts) の `normalizeToTarget()` で RMS を測定し `audio.normalize_target_dbfs` (デフォルト -6) まで増幅、最大ゲイン +20 dB でノイズフロア増幅を抑制、減衰は行わない。正規化ターゲットは GUI 非表示で `config.local.toml` のみから変更可能。(3) レベルメーター表示も peak → RMS に変更し、ゲート閾値との直接比較を可能に
 - **並行ダウンロード対応**: サーバーは Map で複数ダウンロードを管理。UI は動的プログレスバーで各ダウンロードの進捗を個別表示。同一リソースの重複ダウンロードは 409 で拒否
 - **ダウンロード整合性検証**: SHA-256 ハッシュをサイドカーファイル (`.sha256`) に保存。サイドカー不在 = 未完了としてインストール状態を拒否
 - **Whisper server ポート自動割り当て**: managed process 使用時、`net.createServer` で port 0 バインドして空きポートを自動取得。GUI から server フィールドを削除
 - **ウインドウ位置復元**: Electron 終了時に `window-state.json` に bounds を保存、次回起動時に復元。ディスプレイ外の場合はデフォルト位置
-- **CJS 出力**: Electron の `require('electron')` と `onnxruntime-node` が ESM interop で正しく動作しないため、`tsconfig.json` で `module: CommonJS` を使用
+- **CJS 出力**: Electron の `require('electron')` と `onnxruntime-node` が ESM interop で正しく動作しないため、`tsconfig.json` の `module: Node16` と `package.json` に `"type": "module"` を置かない構成で CommonJS を出力
 - **asar integrity afterPack 修正**: electron-builder が asar ファイナライズ前にハッシュを計算するバグがあるため、`afterPack.cjs` で SHA-256 + 4MB ブロック配列を再計算して Info.plist を上書き。`execFileSync` (引数配列) を使用しコマンドインジェクションを防止
 - **onnxruntime-node は asarUnpack**: ネイティブ `.node` バイナリは asar 内から読めないため `asarUnpack` で展開
 - **多重起動防止**: `app.requestSingleInstanceLock()` で単一インスタンスを保証。2 回目の起動は既存ウィンドウをフォーカス
 - **OBS 字幕エラーは非致命的**: `subtitle.show()` の失敗は OBS 接続失敗・推論失敗と分離してログ出力。推論結果は保持され GUI に表示される
 - **字幕送信 queue は FIFO 全保持**: [src/subtitle/manager.ts](src/subtitle/manager.ts) の `pendingQueue` は `clearDelay` 中に到着した認識結果を破棄せず FIFO 順に積み、`drainPending()` で `clearDelay` 間隔ごとに 1 件ずつ OBS へ送信。連続発話の取りこぼしを防ぐため latest-wins ではなく全保持を採用。queue 上限はなく、上流の `MAX_QUEUE = 3` (推論キュー) で実質的に絞られる。`getPendingCount()` と `'pendingChanged'` イベントで queue 残数を外部公開し、GUI の OBS カードに「OBS 送信待ち: N」として表示。OBS 切断中も queue は通常通り積まれ、`showNow()` は `obs.isConnected()` 偽の枝で OBS 通信をスキップしながら `clearDelay` を消化する (空回りなので副作用なし) — 切断時の queue クリアや no-op は採用しない方針 (「間引かず確実に送信」を文字通り守るため)
 - **Last Recognition は Whisper レスポンス時点で更新**: GUI の `lastResult` は `subtitle.displayed/cleared` イベントではなく、[src/pipeline.ts](src/pipeline.ts) `processQueue()` で whisper レスポンス取得直後に直接セット。OBS 切断中・字幕送信 queue 滞留中も GUI に認識結果が即時反映される。`subtitle` の `clearDelay` は OBS 字幕の表示時間制御専用で GUI とは独立。`lastResult` のクリアは `pipeline.stop()` のみ (subtitle 'cleared' では消さない)
-- **Last Recognition の左サイドバー = 直近の送信処理完了マーカー**: 各認識結果に pipeline で連番 `resultSeq` を発行し、`lastResult.seq` と `subtitle.show(ja, en, seq)` の両方に伝搬。`'displayed'` イベントは subtitle のディスパッチハンドラが完了したとき (= OBS 接続中で `updateSubtitle()` 成功 / OBS 切断でスキップ / `updateSubtitle()` が throw した場合のすべてを含む) `try/finally` で必ず一度発火する。`updateSubtitle()` の失敗 (例: テキストソース名違い) は呼び出し側に reject で伝わるが、`'displayed'` の発火は保証される。pipeline は seq を見て `lastDispatchedSeq` を進め、UI は `status.obs.lastDispatchedSeq` と各履歴エントリの `seq` を **完全一致** で比較し、`seq === lastDispatchedSeq` の **1 件のみ** に `.dispatched` クラスを付けて緑バー (`#22c55e`) を表示。緑 = 「最後にディスパッチ処理が走ったメッセージ」、灰色 = 「まだ queue 滞留中で未試行 or 既に古い」。バーは常に 1 件にしか付かず、queue が進むたびに位置が移動する。`pipeline.stop()` で seq カウンタ・lastDispatchedSeq を 0 にリセット
+- **Last Recognition の左サイドバー = 直近の送信処理完了マーカー**: 各認識結果に pipeline で連番 `resultSeq` を発行し、`lastResult.seq` と `subtitle.show(ja, en, seq)` の両方に伝搬。`'displayed'` イベントは subtitle のディスパッチハンドラが完了したとき (= OBS 接続中で `updateSubtitle()` 成功 / OBS 切断でスキップ / `updateSubtitle()` が throw した場合のすべてを含む) `try/finally` で必ず一度発火する。`updateSubtitle()` の失敗 (例: テキストソース名違い) は、即時送信のときは呼び出し側に reject で伝わり、`pendingQueue` 経由のときは `drainPending()` が捨てる。どちらでも `'displayed'` の発火は保証される。pipeline は seq を見て `lastDispatchedSeq` を進め、UI は `status.obs.lastDispatchedSeq` と各履歴エントリの `seq` を **完全一致** で比較し、`seq === lastDispatchedSeq` の **1 件のみ** に `.dispatched` クラスを付けて緑バー (`#22c55e`) を表示。緑 = 「最後にディスパッチ処理が走ったメッセージ」、灰色 = 「まだ queue 滞留中で未試行 or 既に古い」。バーは常に 1 件にしか付かず、queue が進むたびに位置が移動する。`pipeline.stop()` で seq カウンタ・lastDispatchedSeq を 0 にリセット
 - **GUI 折りたたみ + ウィンドウ高さ追従**: Configuration 全体・各セクション・Log パネルが折りたたみ可能。状態は `localStorage` に永続化。折りたたみ時に Electron ウィンドウ高さをコンテンツに追従させ、展開時は保存された最大高さを上限として拡大
 - **UI 多言語対応 (EN/JA)**: `data-i18n` 属性で翻訳キーを指定。言語は `navigator.language` から自動判定、`config.local.toml` の `[ui] language` で上書き可能。「Status」「Last Recognition」は意図的に英語固定
 - **macOS ウィンドウ前面表示**: `show: false` で作成し `ready-to-show` イベントで `show()` + `focus()`。`pipeline.start()` の await 中にフォーカスが失われても確実に前面表示
-- **サードパーティライセンス**: `THIRD_PARTY_LICENSES.txt` に Silero VAD + npm 依存 33 パッケージのライセンスをまとめ、NSIS インストーラーのライセンス画面と `extraResources` に含める
+- **サードパーティライセンス**: `THIRD_PARTY_LICENSES.txt` に Silero VAD + npm 依存パッケージのライセンスをまとめ、NSIS インストーラーのライセンス画面と `extraResources` に含める
 - **macOS 署名・公証**: Developer ID Application (Tetsuya Shinone / `<TEAM_ID>`) で `.app` を署名。hardened runtime + entitlements (`build/entitlements.mac.plist`)。electron-builder の `notarize: true` で `.app` は自動公証・staple される。DMG は electron-builder では署名・公証されないため、`build/notarize-dmg.cjs` を `dist:mac` 後段で実行し sign → notarytool submit --wait → stapler → spctl 検証を行う。認証情報は `node --env-file-if-exists=.env` 経由で `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` を注入。`.env` は LF 改行で保持する (CRLF だと `source` 時に `APPLE_APP_SPECIFIC_PASSWORD` 末尾に `\r` が混入し notarytool が 401 を返す)
 - **macOS Tahoe Liquid Glass アイコン**: macOS 26 SDK でリンクされた Electron 40+ アプリは `.icns` のみだと Liquid Glass UI が「legacy アイコン」と判定し、squircle 白プレートで囲んで表示する。Tahoe ネイティブとして認識させるには Asset Catalog (`Assets.car`) に `IconGroup` / `IconImageStack` / `PackedImage` エントリが必要で、これは `.icon` バンドル形式 (`AppIcon.icon/icon.json` + `Assets/*.png`) を `xcrun actool --include-all-app-icons --target-device mac` でコンパイルした場合のみ生成される (`.xcassets/AppIcon.appiconset/` では `Icon Image` エントリしか出ず legacy 扱い)。`mac.extraResources` で `Assets.car` を `Resources/` に配置し、`mac.extendInfo.CFBundleIconName=AppIcon` で参照。アイコン素材は [build/generate-icon.py](build/generate-icon.py) で `build/icon.{png,ico,icns}` + `build/Assets.car` を一括生成 (PNG/ICNS/Assets.car body は radius 22.5% の Liquid Glass squircle、ICO のみ 18.75% の legacy radius)。`.icns` も並置して pre-Tahoe 互換性を維持。検証は `xcrun assetutil --info Assets.car` で `IconGroup` 等の出現を確認
 - **auto-update**: `electron-updater` で GitHub Releases を `publish` プロバイダとして参照。起動時に `app.whenReady()` 後 `initAutoUpdater()` ([src/updater.ts](src/updater.ts)) が `autoUpdater.checkForUpdates()` を呼び、`autoDownload: true` + `autoInstallOnAppQuit: true` で差分ダウンロード + 終了時適用。`app.isPackaged` で dev 環境はスキップ。electron-builder はドラフトリリースを検出しないため、`release.yaml` が作成するドラフトを GitHub 上で **手動 publish** する必要がある。macOS は署名必須 (Gatekeeper が unsigned の差分適用を拒否)。リリース成果物に `latest.yml` / `latest-mac.yml` / `*.blockmap` を含めることで差分更新を有効化。electron-builder と softprops の二重アップロードを防ぐため、`dist:win` / `dist:mac` には `--publish=never` を指定
@@ -148,11 +152,11 @@ HTTP サーバー (`127.0.0.1:9880`) で以下を提供:
 - `POST /api/capture` — 16kHz mono WAV キャプチャ (最大 30 秒)
 - `GET /api/events` — SSE ストリーム (status + log + download-progress イベント)
 
-## Config
+## 設定
 
 `config.toml` (デフォルト値は `src/config.ts` の `DEFAULTS` に定義)。バリデーションは `validateConfig()` で実施 (export 済み)。データ保存先の詳細は README.md を参照。
 
-## External Dependencies
+## 外部依存
 
 - **obs-vban** (OBS PC 側): https://github.com/norihiro/obs-vban
 - **whisper.cpp** (字幕 PC 側): `whisper-server -m ggml-large-v3.bin --host 127.0.0.1 --port 8080`
