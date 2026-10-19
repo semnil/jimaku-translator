@@ -83,7 +83,7 @@ describe('release-tag plan', () => {
     commits[name] = git('rev-parse', 'HEAD');
   }
 
-  function pkg(version?: string): Record<string, string> {
+  function packageJson(version?: string): Record<string, string> {
     return { 'package.json': JSON.stringify(version === undefined ? { name: 'x' } : { name: 'x', version }) };
   }
 
@@ -105,20 +105,20 @@ describe('release-tag plan', () => {
       GIT_COMMITTER_EMAIL: 'test@example.com',
     };
     git('init', '--quiet', '-b', 'main');
-    commit('root', pkg('1.0.0'));
+    commit('root', packageJson('1.0.0'));
     commit('unrelated', { 'README.md': 'x' });
-    commit('bump', pkg('1.0.1'));
-    commit('prerelease', pkg('1.1.0-rc.1'));
-    commit('declined', pkg('1.1.0-foo'));
-    commit('downgrade', pkg('1.0.1'));
-    commit('no-version', pkg());
-    commit('after-no-version', pkg('1.2.0'));
-    commit('empty-version', pkg(''));
-    commit('after-empty-version', pkg('1.2.0'));
+    commit('bump', packageJson('1.0.1'));
+    commit('prerelease', packageJson('1.1.0-rc.1'));
+    commit('declined', packageJson('1.1.0-foo'));
+    commit('downgrade', packageJson('1.0.1'));
+    commit('no-version', packageJson());
+    commit('after-no-version', packageJson('1.2.0'));
+    commit('empty-version', packageJson(''));
+    commit('after-empty-version', packageJson('1.2.0'));
 
     // A merge whose first parent is main's previous tip and whose second parent bumped the version.
     git('checkout', '--quiet', '-b', 'feature');
-    commit('feature-bump', pkg('1.3.0'));
+    commit('feature-bump', packageJson('1.3.0'));
     git('checkout', '--quiet', 'main');
     commit('main-side', { 'README.md': 'y' });
     git('merge', '--quiet', '--no-ff', '-m', 'merge', 'feature');
@@ -127,7 +127,7 @@ describe('release-tag plan', () => {
     git('checkout', '--quiet', '--orphan', 'orphan');
     git('rm', '--quiet', '-r', '--cached', '.');
     commit('orphan-root', { 'README.md': 'z' });
-    commit('orphan-adds-package', pkg('2.0.0'));
+    commit('orphan-adds-package', packageJson('2.0.0'));
   });
 
   afterAll(() => {
