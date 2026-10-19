@@ -5,6 +5,8 @@ run-name: ${{ github.event.workflow_run.head_branch }} tag release 🏷️
 # and that push changed the version in package.json, this tags the tested commit as
 # vX.Y.Z and dispatches release.yaml on the tag. build/release-tag.cjs decides whether
 # the push moved the version and whether its tag is one release.yaml releases.
+# The first parent of the tested commit is main's tip before the merge, since main's
+# ruleset allows merge commits and squash merges only.
 # A tag pushed with GITHUB_TOKEN starts no workflow, so release.yaml is started with
 # workflow_dispatch on the tag ref instead of by its push: tags trigger.
 on:
