@@ -5,18 +5,18 @@ run-name: ${{ github.event.workflow_run.head_branch }} tag release 🏷️
 # and that push changed the version in package.json, this tags the tested commit as
 # vX.Y.Z and dispatches release.yaml on the tag. build/release-tag.cjs decides whether
 # the push moved the version and whether its tag is one release.yaml releases.
-# The first parent of the tested commit is main's tip before the merge, since main's
-# ruleset allows merge commits and squash merges only.
-# A tag pushed with GITHUB_TOKEN starts no workflow, so release.yaml is started with
-# workflow_dispatch on the tag ref instead of by its push: tags trigger.
+# The comparison takes the first parent of the tested commit as main's tip before the
+# merge; main's ruleset allows merge commits and squash merges only.
+# release.yaml is started with workflow_dispatch on the tag ref, not by its push: tags
+# trigger; a tag pushed with GITHUB_TOKEN starts no workflow.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
 
-# One group per tested commit, so two merges landing together each get their own run
-# and neither cancels the other.
+# One group per tested commit: two merges landing together each get their own run, and
+# neither cancels the other.
 concurrency:
   group: tag-release-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
@@ -35,8 +35,8 @@ jobs:
       run:
         shell: bash
     steps:
-      # The commit CI reported on, not whatever main points at now, with its first
-      # parent readable so the version can be compared.
+      # Checks out the commit CI reported on, not whatever main points at now, with the
+      # history that holds its first parent.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -44,7 +44,7 @@ jobs:
 
       # A tag already on the remote is never moved. One at another commit fails the job.
       # One at this commit is this release's own tag, and release.yaml is dispatched on it
-      # unless a release.yaml run on that tag exists, so a re-run after a failed dispatch
+      # unless a release.yaml run on that tag exists; a re-run after a failed dispatch
       # starts the build.
       - name: Tag and Dispatch Release 🏷️
         env:
