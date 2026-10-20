@@ -746,7 +746,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
 
     // Connection test — non-fatal: don't disrupt the connection on failure
     try {
-      await this.subtitle.show('[接続テスト]', '[Connection Test]');
+      await this.subtitle.show('[Connection Test]', '[Connection Test]');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.log(`[OBS] Subtitle test failed (source may not exist): ${msg}`);
