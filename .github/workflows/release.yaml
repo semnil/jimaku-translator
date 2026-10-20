@@ -1,6 +1,10 @@
 name: Release
 run-name: ${{ github.ref_name }} release build 🚀
 
+# A run on a tag ref builds Windows and macOS and creates a draft Release.
+# tag-release.yaml dispatches this workflow on the tag of a merged version bump, and a
+# tag pushed by hand starts it through the push: tags trigger. A dispatch on a branch
+# only builds.
 on:
   push:
     tags:
@@ -15,6 +19,7 @@ jobs:
   check-event:
     name: Check Release Tag ☑️
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     defaults:
       run:
         shell: bash
@@ -23,32 +28,35 @@ jobs:
       prerelease: ${{ steps.check.outputs.prerelease }}
       validTag: ${{ steps.check.outputs.validTag }}
     steps:
+      # For build/release-tag.cjs, at the tag this run builds.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: github.ref_type == 'tag'
+
       - name: Check Tag ☑️
         id: check
         run: |
           : Check Release Tag
           if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
 
-          if [[ "${GITHUB_EVENT_NAME}" != 'push' ]]; then
+          # A tag push, or a dispatch on a tag ref (tag-release.yaml), releases.
+          if [[ "${GITHUB_REF_TYPE}" != 'tag' ]]; then
             echo 'validTag=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          tag="${GITHUB_REF_NAME#v}"
-          case "${tag}" in
-            +([0-9]).+([0-9]).+([0-9]) )
+          prerelease=$(node build/release-tag.cjs shape "${GITHUB_REF_NAME}") && status=0 || status=$?
+          case "${status}:${prerelease}" in
+            0:true | 0:false )
               echo 'validTag=true' >> "$GITHUB_OUTPUT"
-              echo 'prerelease=false' >> "$GITHUB_OUTPUT"
+              echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
               echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
               ;;
-            +([0-9]).+([0-9]).+([0-9])-@(beta|rc|alpha)*([0-9.]) )
-              echo 'validTag=true' >> "$GITHUB_OUTPUT"
-              echo 'prerelease=true' >> "$GITHUB_OUTPUT"
-              echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            3: )
+              echo 'validTag=false' >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo 'validTag=false' >> "$GITHUB_OUTPUT"
+              echo "::error::the release tag check did not run (exit ${status})"
+              exit 1
               ;;
           esac
 

@@ -197,7 +197,7 @@ App 用パスワードは https://appleid.apple.com/ で発行する。electron-
 
 ### GitHub Actions CI/CD
 
-`v*.*.*` 形式のタグを push すると [.github/workflows/release.yaml](.github/workflows/release.yaml) が発火し、Windows + macOS ビルドを実行してドラフトリリースを作成する。リリースノートは GitHub 自動生成 (`generate_release_notes: true`) で、前回のタグからの PR/コミットが列挙される。
+リリースは版上げ PR (`package.json` と `package-lock.json` の版だけを変える PR) のマージで始まる。main への push で走った CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) が成功すると、[.github/workflows/tag-release.yaml](.github/workflows/tag-release.yaml) がマージコミットに `vX.Y.Z` タグを打ち、そのタグ上で [.github/workflows/release.yaml](.github/workflows/release.yaml) を起動する。`release.yaml` は Windows + macOS ビルドを実行してドラフトリリースを作成する。版が変わらない push ではタグを打たず、同名のタグが既にあるときはタグを動かさない。`v*.*.*` 形式のタグを手で push しても `release.yaml` は起動する。リリースノートは GitHub 自動生成 (`generate_release_notes: true`) で、前回のタグからの PR/コミットが列挙される。
 
 macOS 署名・公証には以下の GitHub Secrets が必要 (未設定でもビルドは継続し、署名・公証なしの DMG が生成される):
 
@@ -223,7 +223,7 @@ Windows 側は現状コード署名未設定のため、追加の Secret は不�
 
 パッケージ版アプリは起動時に GitHub Releases を参照して新バージョンを確認し、差分ダウンロード後、アプリ終了時に自動適用する ([electron-updater](https://www.electron.build/auto-update))。開発モード (`npm run electron`) では自動更新処理はスキップされる。
 
-**リリース公開の運用**: ワークフローはドラフトリリースを作成するが、electron-updater はドラフトを検出しない。タグ push → ワークフロー完了後、GitHub 上でリリースを手動 publish することで初めてインストール済みクライアントに更新が配信される。
+**リリース公開の運用**: ワークフローはドラフトリリースを作成するが、electron-updater はドラフトを検出しない。版上げ PR のマージ → `release.yaml` の完了後、GitHub 上でリリースを手動 publish することで初めてインストール済みクライアントに更新が配信される。
 
 **macOS 制約**: auto-update は署名済みビルドでのみ動作する。unsigned DMG をインストールした場合、自動更新の検証段階で Gatekeeper が差分を拒否するため手動アップデートが必要。
 

@@ -1,0 +1,87 @@
+name: Tag Release
+run-name: ${{ github.event.workflow_run.head_branch }} tag release 🏷️
+
+# Turns a merged version bump into a release. When CI finishes green on a push to main
+# and that push changed the version in package.json, this tags the tested commit as
+# vX.Y.Z and dispatches release.yaml on the tag. build/release-tag.cjs decides whether
+# the push moved the version and whether its tag is one release.yaml releases.
+# The comparison takes the first parent of the tested commit as main's tip before the
+# merge; main's ruleset allows merge commits and squash merges only.
+# release.yaml is started with workflow_dispatch on the tag ref, not by its push: tags
+# trigger; a tag pushed with GITHUB_TOKEN starts no workflow.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# One group per tested commit: two merges landing together each get their own run, and
+# neither cancels the other.
+concurrency:
+  group: tag-release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create and push the tag
+  actions: write # dispatch release.yaml
+
+jobs:
+  tag:
+    name: Tag Version Bump 🏷️
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Checks out the commit CI reported on, not whatever main points at now, with the
+      # history that holds its first parent.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # A tag already on the remote is never moved. One at another commit fails the job.
+      # One at this commit is this release's own tag, and release.yaml is dispatched on it
+      # unless a release.yaml run on that tag exists; a re-run after a failed dispatch
+      # starts the build.
+      - name: Tag and Dispatch Release 🏷️
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          : Tag and Dispatch Release
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+
+          if ! tag=$(node build/release-tag.cjs plan "${HEAD_SHA}"); then
+            echo "::error::no release tag for ${HEAD_SHA}; the reason is in the log above"
+            exit 1
+          fi
+          if [[ -z "${tag}" ]]; then
+            echo "nothing to release at ${HEAD_SHA}"
+            exit 0
+          fi
+
+          # An annotated tag lists twice, and its peeled ^{} line names the commit.
+          listed=$(git ls-remote --tags origin "refs/tags/${tag}" "refs/tags/${tag}^{}")
+          peeled=$(printf '%s\n' "${listed}" | awk -v ref="refs/tags/${tag}^{}" '$2 == ref { print $1 }')
+          direct=$(printf '%s\n' "${listed}" | awk -v ref="refs/tags/${tag}" '$2 == ref { print $1 }')
+          existing=${peeled:-${direct}}
+          if [[ -z "${existing}" ]]; then
+            git tag "${tag}" "${HEAD_SHA}"
+            git push origin "refs/tags/${tag}"
+            echo "tagged ${tag} at ${HEAD_SHA}"
+          elif [[ "${existing}" != "${HEAD_SHA}" ]]; then
+            echo "::error::${tag} already names ${existing}, not ${HEAD_SHA}; leaving it alone"
+            exit 1
+          else
+            runs=$(gh run list --workflow release.yaml --branch "${tag}" --json databaseId --jq length)
+            if (( runs > 0 )); then
+              echo "${tag} already names ${HEAD_SHA} and release.yaml has run on it"
+              exit 0
+            fi
+            echo "${tag} already names ${HEAD_SHA} and release.yaml has not run on it"
+          fi
+          gh workflow run release.yaml --ref "${tag}"
+          echo "dispatched release.yaml on ${tag}"
