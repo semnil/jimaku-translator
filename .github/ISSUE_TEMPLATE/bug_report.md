@@ -1,5 +1,5 @@
 ---
-name: Bug report
+name: Bug report / バグレポート
 about: Create a report to help us improve
 title: ''
 labels: ''
@@ -7,28 +7,26 @@ assignees: ''
 
 ---
 
-<!-- English or Japanese are both fine — 日本語で構いません。 -->
-
-**Describe the bug**  
+**Describe the bug / バグの詳細**  
 A clear and concise description of what the bug is.
 
-**To Reproduce**  
+**To Reproduce / 再現手順**  
 Steps to reproduce the behavior:
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
 
-**Expected behavior**  
+**Expected behavior / 期待する動作**  
 A clear and concise description of what you expected to happen.
 
-**Screenshots**  
+**Screenshots / スクリーンショット**  
 If applicable, add screenshots to help explain your problem.
 
-**Environment (please complete the following information):**  
+**Environment / 動作環境 (please complete the following information):**  
  - OS: [e.g. Windows, macOS]
  - Browser [e.g. chrome, safari]
  - Version [e.g. 22]
 
-**Additional context**  
+**Additional context / 追加の情報**  
 Add any other context about the problem here.
