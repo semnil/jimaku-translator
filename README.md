@@ -1,234 +1,236 @@
 # jimaku-translator
 
-OBS リアルタイム字幕システム。VBAN 経由で OBS の音声を受信し、Whisper で日本語認識 + 英語翻訳を行い、OBS のテキストソースに字幕を表示する。GUI でステータス表示・設定変更が可能。
+A real-time subtitle system for OBS. It receives OBS audio over VBAN, runs Japanese recognition + English translation with Whisper, and shows the subtitles in OBS text sources. A GUI shows the status and lets you change the settings.
 
-## 必要なもの
+> 日本語版は [README.ja.md](README.ja.md) を参照してください.
+
+## Requirements
 
 ### OBS PC
 
-- OBS Studio 28 以上
-- [obs-vban](https://github.com/norihiro/obs-vban/releases) プラグイン
+- OBS Studio 28 or later
+- The [obs-vban](https://github.com/norihiro/obs-vban/releases) plugin
 
-### 字幕 PC (macOS / Windows)
+### Subtitle PC (macOS / Windows)
 
-- jimaku-translator (インストーラーから導入)
-- OBS PC と別マシンでも、同じ PC で同時に動かしてもよい
+- jimaku-translator (installed from the installer)
+- It can be a different machine from the OBS PC, or run on the same PC at the same time
 
-## セットアップ
+## Setup
 
-### 1. OBS PC 側
+### 1. On the OBS PC
 
-1. obs-vban をインストール
-2. 字幕対象の音声ソース（マイク等）のフィルターを開く
-3. 「VBAN Audio Output」を追加し、以下を設定:
-   - **IP Address To**: 字幕 PC の IP アドレス (同一 PC で動作させる場合は `127.0.0.1`)
+1. Install obs-vban
+2. Open the filters of the audio source to subtitle (a microphone, etc.)
+3. Add "VBAN Audio Output" and set the following:
+   - **IP Address To**: the IP address of the subtitle PC (`127.0.0.1` when running on the same PC)
    - **Port**: `6980`
-   - **Stream Name**: 任意 (例: `subtitle`)。空でも動作する (字幕 PC 側で未指定なら全ストリームを受信)
+   - **Stream Name**: any (e.g. `subtitle`). It also works when empty (if the subtitle PC does not specify one, it receives all streams)
    - **Format**: 16-bit integer
-4. ノイズ除去フィルターの **後** に配置する（クリーンな音声を送るため）
-5. テキスト (GDI+) ソースを 2 つ作成。名前は任意 (例: `subtitle_ja`, `subtitle_en`) で、字幕 PC 側の GUI からドロップダウンで選択する
+4. Place it **after** the noise suppression filter (so that clean audio is sent)
+5. Create 2 Text (GDI+) sources. The names are up to you (e.g. `subtitle_ja`, `subtitle_en`); you select them from drop-downs in the GUI on the subtitle PC
 
-### 2. 字幕 PC 側
+### 2. On the subtitle PC
 
-macOS のみ、事前に Homebrew が必要。未インストールの場合は https://brew.sh から先にインストールする (Windows は不要)。
+On macOS only, Homebrew is required beforehand. If it is not installed, install it first from https://brew.sh (not needed on Windows).
 
-1. インストーラーから jimaku-translator をインストールして起動
-2. 設定フォームの **Whisper** セクションで:
-   - **バイナリ**: 自分の環境に合うバリアントを選び「ダウンロード」(macOS は `brew install whisper-cpp` が自動実行される。Windows は CPU / CUDA から選択)
-   - **モデル**: 用途に合うモデルを選び「ダウンロード」(推奨: `large-v3-turbo-q5_0` は高速、`large-v3` は高精度で翻訳対応)
-3. **OBS WebSocket** セクションで接続先ホスト/ポート/パスワードを入力し「再接続」
-4. **日本語テキストソース** / **英語テキストソース** のドロップダウンで OBS 側に作成したテキストソースを選択
-5. 「保存」を押して設定を保存。変更は即時反映される (Whisper のバイナリ/モデル変更のみ再起動が必要)
+1. Install jimaku-translator from the installer and launch it
+2. In the **Whisper** section of the settings form:
+   - **Binary**: choose the variant that fits your environment and click "Download" (on macOS, `brew install whisper-cpp` runs automatically; on Windows, choose from CPU / CUDA)
+   - **Model**: choose a model that fits your use and click "Download" (recommended: `large-v3-turbo-q5_0` is fast; `large-v3` is accurate and supports translation)
+3. In the **OBS WebSocket** section, enter the host / port / password to connect to and click "Reconnect"
+4. In the **Japanese Text Source** / **English Text Source** drop-downs, select the text sources you created in OBS
+5. Click "Save" to save the settings. Changes take effect immediately (only changing the Whisper binary / model needs a restart)
 
 ## GUI
 
-起動するとステータスパネル・設定フォーム・ログを表示するウィンドウが開く。
+On launch, a window opens showing the status panel, the settings form, and the log.
 
-- **ステータスパネル**: 入力受信状態、OBS 接続状態 (OBS への送信が `clearDelay` で滞留している間は「OBS 送信待ち: N」を併記)、Whisper サーバー状態をリアルタイム表示
-- **認識結果**: 直近の日本語認識・英語翻訳を表示。Whisper から結果を受け取った時点で更新されるため、OBS 切断中や `clearDelay` で OBS への送信が遅延している間も認識結果を確認できる。緑の左サイドバーは **直近に送信処理を完了したメッセージ 1 件** に付き (成功・失敗・OBS 切断時のスキップを含む)、queue が進むたびに位置が移動する
-- **設定フォーム**: 全設定項目を GUI で編集し `config.local.toml` に保存。保存時に即時反映される (Whisper のバイナリ/モデル変更のみ再起動が必要)。OBS テキストソースはドロップダウンで候補を選択可能。Whisper のバイナリ/モデルはドロップダウンから選択してワンクリックでダウンロード可能
-- **入力レベルメーター**: 入力音声の RMS レベルをリアルタイム表示 (dBFS)。RMS ゲート閾値との直接比較が可能
-- **音声キャプチャ**: Capture 5s WAV ボタンで 16kHz mono WAV をダウンロード
-- **ログ**: パイプラインのログをリアルタイム表示
+- **Status panel**: shows the input reception status, the OBS connection status (while sending to OBS is held back by `clearDelay`, "Send pending: N" is shown next to it), and the Whisper server status in real time
+- **Recognition result**: shows the latest Japanese recognition and English translation. It updates when the result arrives from Whisper, so you can see recognition results even while OBS is disconnected or sending to OBS is delayed by `clearDelay`. The green left sidebar is on **the single message whose send processing finished most recently** (including success, failure, and skipping while OBS is disconnected), and moves each time the queue advances
+- **Settings form**: edit every setting in the GUI and save it to `config.local.toml`. Changes take effect on save (only changing the Whisper binary / model needs a restart). OBS text sources can be picked from the candidates in a drop-down. The Whisper binary / model can be selected from a drop-down and downloaded in one click
+- **Input level meter**: shows the RMS level of the input audio in real time (dBFS). It can be compared directly with the RMS gate threshold
+- **Audio capture**: the Capture 5s WAV button downloads a 16kHz mono WAV
+- **Log**: shows the pipeline log in real time
 
-CLI モードでも `http://127.0.0.1:9880/` でブラウザから同じ GUI にアクセスできる。
+In CLI mode, the same GUI is available from a browser at `http://127.0.0.1:9880/`.
 
-## 動作の流れ
+## How it works
 
 ```
-OBS マイク → obs-vban フィルター → VBAN (UDP) → jimaku-translator
-  → ダウンミックス (stereo→mono)
-  → リサンプル (48kHz→16kHz)
-  → RMS ゲート (閾値未満はスキップして VAD 誤検出とCPU負荷を抑制)
-  → Silero VAD (発話区間検出、500ms の pre-speech padding で立ち上がり補完)
-  → 発話セグメント正規化 (RMS を -6 dBFS に増幅、+20 dB キャップ)
-  → whisper.cpp server (認識: JA + 翻訳: EN を逐次実行)
-    (binary 設定時はアプリが whisper-server を自動起動/停止)
-  → OBS WebSocket → テキストソース更新
-  → 設定秒数後に自動クリア (デフォルト 6 秒)
+OBS microphone → obs-vban filter → VBAN (UDP) → jimaku-translator
+  → downmix (stereo→mono)
+  → resample (48kHz→16kHz)
+  → RMS gate (skips audio below the threshold to reduce VAD false detections and CPU load)
+  → Silero VAD (speech segment detection; 500ms of pre-speech padding fills in the onset)
+  → speech segment normalization (amplifies RMS to -6 dBFS, +20 dB cap)
+  → whisper.cpp server (recognition: JA + translation: EN, run sequentially)
+    (when binary is set, the app starts/stops whisper-server automatically)
+  → OBS WebSocket → text source update
+  → automatic clear after the configured number of seconds (default 6 seconds)
 ```
 
-## データ保存先
+## Where data is stored
 
-Electron アプリはユーザーデータディレクトリにランタイムデータを保存する。
+The Electron app stores runtime data in the user data directory.
 
 ### Windows
 
-| データ | パス |
+| Data | Path |
 |--------|------|
-| ローカル設定 | `%APPDATA%/jimaku-translator/config.local.toml` |
-| ウインドウ状態 | `%APPDATA%/jimaku-translator/window-state.json` |
-| Whisper バイナリ | `%APPDATA%/jimaku-translator/whisper/bin/<variant>/Release/` |
-| Whisper モデル | `%APPDATA%/jimaku-translator/whisper/models/` |
-| チェックサム | `%APPDATA%/jimaku-translator/whisper/models/*.sha256` |
+| Local settings | `%APPDATA%/jimaku-translator/config.local.toml` |
+| Window state | `%APPDATA%/jimaku-translator/window-state.json` |
+| Whisper binary | `%APPDATA%/jimaku-translator/whisper/bin/<variant>/Release/` |
+| Whisper models | `%APPDATA%/jimaku-translator/whisper/models/` |
+| Checksums | `%APPDATA%/jimaku-translator/whisper/models/*.sha256` |
 
 ### macOS
 
-| データ | パス |
+| Data | Path |
 |--------|------|
-| ローカル設定 | `~/Library/Application Support/jimaku-translator/config.local.toml` |
-| ウインドウ状態 | `~/Library/Application Support/jimaku-translator/window-state.json` |
-| Whisper バイナリ | `/opt/homebrew/bin/whisper-server` (Homebrew 管理) |
-| Whisper モデル | `~/Library/Application Support/jimaku-translator/whisper/models/` |
-| チェックサム | `~/Library/Application Support/jimaku-translator/whisper/models/*.sha256` |
+| Local settings | `~/Library/Application Support/jimaku-translator/config.local.toml` |
+| Window state | `~/Library/Application Support/jimaku-translator/window-state.json` |
+| Whisper binary | `/opt/homebrew/bin/whisper-server` (managed by Homebrew) |
+| Whisper models | `~/Library/Application Support/jimaku-translator/whisper/models/` |
+| Checksums | `~/Library/Application Support/jimaku-translator/whisper/models/*.sha256` |
 
-環境変数 `VBAN_WHISPER_DIR` で Whisper データディレクトリを上書き可能。CLI モードでは `config.local.toml` は `config.toml` と同じディレクトリに保存される。
+The environment variable `VBAN_WHISPER_DIR` overrides the Whisper data directory. In CLI mode, `config.local.toml` is saved in the same directory as `config.toml`.
 
-## 設定 (config.toml)
+## Settings (config.toml)
 
-通常は GUI から設定するため手動編集は不要。参考として全項目を掲載する。
+Settings are normally made from the GUI, so manual editing is not needed. All items are listed here for reference.
 
 ```toml
 [vban]
 port = 6980
-stream_name = ""            # 任意。空文字 = 全ストリーム受信
+stream_name = ""            # Optional. Empty string = receive all streams
 
 [obs]
-host = "127.0.0.1"          # OBS PC の IP
+host = "127.0.0.1"          # IP of the OBS PC
 port = 4455
-password = ""               # OBS WebSocket パスワード
-source_ja = ""              # 日本語字幕テキストソース名 (空 = 無効)
-source_en = ""              # 英語字幕テキストソース名 (空 = 無効)
-closed_caption = false      # 配信ストリームに CC を埋め込む
-cc_language = "en"          # CC の言語 ("en" or "ja")
+password = ""               # OBS WebSocket password
+source_ja = ""              # Japanese subtitle text source name (empty = disabled)
+source_en = ""              # English subtitle text source name (empty = disabled)
+closed_caption = false      # Embed CC in the broadcast stream
+cc_language = "en"          # CC language ("en" or "ja")
 
 [whisper]
-server = "http://127.0.0.1:8080"  # managed process 使用時は自動割り当て
-binary = ""                     # whisper-server バイナリパス (空 = 手動管理)
-model = ""                      # GGML モデルパス (binary 設定時は必須)
-binary_variant = ""             # GUI で選択したバリアント ID (自動解決用)
-model_name = ""                 # GUI で選択したモデル ID (自動解決用)
-# threads = 4                   # whisper-server --threads (省略時は自動: macOS/GPU=4, CPU=論理コア数/2)
+server = "http://127.0.0.1:8080"  # Assigned automatically when the managed process is used
+binary = ""                     # whisper-server binary path (empty = managed manually)
+model = ""                      # GGML model path (required when binary is set)
+binary_variant = ""             # Variant ID selected in the GUI (for automatic resolution)
+model_name = ""                 # Model ID selected in the GUI (for automatic resolution)
+# threads = 4                   # whisper-server --threads (automatic when omitted: macOS/GPU=4, CPU=logical cores/2)
 
 [subtitle]
-clear_delay = 6.0           # 字幕クリアまでの秒数
-chars_per_line = 0          # 1 行の文字数 (0 = 改行しない、OBS 側で折り返し)
+clear_delay = 6.0           # Seconds until the subtitle is cleared
+chars_per_line = 0          # Characters per line (0 = no line breaks; OBS wraps the text)
 
 [vad]
-threshold = 0.5             # 発話検出閾値 (0-1)
-min_speech_ms = 500         # 最小発話長 (ms)
-max_speech_ms = 10000       # 最大チャンク長 (ms)
+threshold = 0.5             # Speech detection threshold (0-1)
+min_speech_ms = 500         # Minimum speech length (ms)
+max_speech_ms = 10000       # Maximum chunk length (ms)
 
 [audio]
-rms_gate_db = -60           # RMS ゲート (dBFS)。これ未満は VAD に渡さない。範囲 -90 〜 -30
-normalize_target_dbfs = -6  # 発話セグメントを正規化する目標 RMS (dBFS)。0 = 無効、GUI 非表示
+rms_gate_db = -60           # RMS gate (dBFS). Audio below this is not passed to VAD. Range -90 to -30
+normalize_target_dbfs = -6  # Target RMS (dBFS) for normalizing speech segments. 0 = disabled; hidden in the GUI
 
 [ui]
-language = ""               # "" = システム言語を自動判定、"en" または "ja" で固定
+language = ""               # "" = detect the system language automatically; "en" or "ja" to fix it
 ```
 
-## トラブルシューティング
+## Troubleshooting
 
-### VBAN パケットが届かない
-- ファイアウォールで UDP 6980 を許可しているか確認
-- OBS 側の VBAN Output Filter の IP アドレスが正しいか確認
-- 同一サブネットであることを確認
+### VBAN packets do not arrive
+- Check that UDP 6980 is allowed in the firewall
+- Check that the IP address in the VBAN Output Filter on the OBS side is correct
+- Check that both machines are on the same subnet
 
-### OBS WebSocket に接続できない
-- OBS 側で WebSocket サーバーが有効か確認（ツール → WebSocket サーバー設定）
-- ファイアウォールで TCP 4455 を許可
-- パスワードが正しいか確認
+### Cannot connect to OBS WebSocket
+- Check that the WebSocket server is enabled in OBS (Tools → WebSocket Server Settings)
+- Allow TCP 4455 in the firewall
+- Check that the password is correct
 
-### Whisper の認識が遅い
-- `large-v3` モデルは M5 Mac で 1-3 秒程度のレイテンシ
-- 速度が必要な場合は `large-v3-turbo-q5_0` (574 MB) に変更
-- 日本語特化: `kotoba-bilingual-q5_0` (538 MB, 翻訳対応) または `kotoba-v2.2-q5_0` (538 MB, JA のみ)
-- Windows: CUDA 対応 GPU がある場合は GUI の Whisper セクションから CUDA バリアントをダウンロード
-- macOS: Homebrew 版は Core ML / Metal で自動的に GPU アクセラレーションが有効
+### Whisper recognition is slow
+- The `large-v3` model has a latency of about 1-3 seconds on an M5 Mac
+- If you need speed, switch to `large-v3-turbo-q5_0` (574 MB)
+- Specialized for Japanese: `kotoba-bilingual-q5_0` (538 MB, supports translation) or `kotoba-v2.2-q5_0` (538 MB, JA only)
+- Windows: if you have a CUDA-capable GPU, download the CUDA variant from the Whisper section of the GUI
+- macOS: the Homebrew build enables GPU acceleration automatically with Core ML / Metal
 
-### 翻訳が空になる / 英語に翻訳されない
-- `large-v3-turbo` 系、`kotoba` 系、`anime-whisper` は翻訳非対応 (distil-whisper ベースで翻訳タスク未保持)
-- 翻訳が必要な場合は `large-v3`, `medium`, `small`, `base` 等のオリジナル Whisper モデルを使用
+### The translation is empty / not translated into English
+- The `large-v3-turbo` family, the `kotoba` family, and `anime-whisper` do not support translation (they are based on distil-whisper and do not keep the translation task)
+- If you need translation, use an original Whisper model such as `large-v3`, `medium`, `small`, or `base`
 
-### 推論キューが溜まる
-- ログに `[Queue] Dropped segment` が出る場合、Whisper の処理が追いついていない
-- モデルサイズを下げるか、「最長発話 (ms)」を短くして推論単位を小さくする
+### The inference queue builds up
+- If `[Queue] Dropped segment` appears in the log, Whisper processing is not keeping up
+- Use a smaller model, or shorten "Max Speech (ms)" to make the inference unit smaller
 
-### 認識精度が悪い
-- 入力レベルメーターで dBFS を確認。-30 dBFS より低い場合、OBS 側のマイク音量を上げる
-- RMS ゲート (dBFS) を低めに設定すると微小音声も拾う (ただしノイズ誤検出が増える)
-- 発話先頭が欠ける場合は Silero VAD の `しきい値` を下げる (0.3 程度)。ただし false positive 増加
-- 内部品質検証では `medium` モデルで日本語認識・英訳ともに実用十分。`large-v3` への引き上げが必要かは用途次第 (放送・配信等で固有名詞精度を最優先する場合のみ検討)
-- ノイズが多い環境では OBS 側のノイズ除去フィルターを VBAN Output フィルターより前に配置
-- VAD が speech を emit した後は自動で -6 dBFS まで正規化して Whisper に送られるため、ゲイン調整は不要 (正規化ターゲットは `config.local.toml` の `[audio] normalize_target_dbfs` で調整可能)
+### Recognition accuracy is poor
+- Check the dBFS on the input level meter. If it is lower than -30 dBFS, raise the microphone volume on the OBS side
+- Setting the RMS Gate (dBFS) lower picks up quieter speech (but increases false detections from noise)
+- If the start of speech is cut off, lower the Silero VAD `Threshold` (to about 0.3). False positives increase, though
+- In internal quality checks, the `medium` model is practically sufficient for both Japanese recognition and English translation. Whether moving up to `large-v3` is needed depends on the use (consider it only when the accuracy of proper nouns has top priority, such as for broadcasting or streaming)
+- In a noisy environment, place the noise suppression filter on the OBS side before the VBAN Output filter
+- After VAD emits speech, it is automatically normalized to -6 dBFS before being sent to Whisper, so no gain adjustment is needed (the normalization target can be adjusted with `[audio] normalize_target_dbfs` in `config.local.toml`)
 
-## 開発
+## Development
 
 ```bash
-npm test              # vitest ユニットテスト
-npm run test:e2e      # Playwright E2E テスト
-npm run test:watch    # ウォッチモード
-npm run build         # TypeScript ビルド
-npm run dist:win      # Windows インストーラー生成
-npm run dist:mac      # macOS ディスクイメージ生成 (署名 + 公証)
+npm test              # vitest unit tests
+npm run test:e2e      # Playwright E2E tests
+npm run test:watch    # watch mode
+npm run build         # TypeScript build
+npm run dist:win      # build the Windows installer
+npm run dist:mac      # build the macOS disk image (signing + notarization)
 ```
 
-### macOS 署名・公証
+### macOS signing and notarization
 
-`npm run dist:mac` は Developer ID Application 証明書で `.app` と `.dmg` の両方に署名し、Apple notarytool で公証・staple まで自動実行する。認証情報は `.env` から読み込む (Node の `--env-file-if-exists` を使用):
+`npm run dist:mac` signs both the `.app` and the `.dmg` with a Developer ID Application certificate and automatically runs notarization and stapling with Apple notarytool. Credentials are read from `.env` (using Node's `--env-file-if-exists`):
 
 ```bash
 cp .env.example .env
-# APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID を設定
+# Set APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
 npm run dist:mac
 ```
 
-App 用パスワードは https://appleid.apple.com/ で発行する。electron-builder が `.app` を公証した後、[build/notarize-dmg.cjs](build/notarize-dmg.cjs) が DMG の sign → notarytool submit → stapler → spctl 検証を実施する。
+The app-specific password is issued at https://appleid.apple.com/. After electron-builder notarizes the `.app`, [build/notarize-dmg.cjs](build/notarize-dmg.cjs) runs sign → notarytool submit → stapler → spctl verification on the DMG.
 
 ### GitHub Actions CI/CD
 
-リリースは版上げ PR (`package.json` と `package-lock.json` の版だけを変える PR) のマージで始まる。main への push で走った CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) が成功すると、[.github/workflows/tag-release.yaml](.github/workflows/tag-release.yaml) がマージコミットに `vX.Y.Z` タグを打ち、そのタグ上で [.github/workflows/release.yaml](.github/workflows/release.yaml) を起動する。`release.yaml` は Windows + macOS ビルドを実行してドラフトリリースを作成する。版が変わらない push ではタグを打たず、同名のタグが既にあるときはタグを動かさない。`v*.*.*` 形式のタグを手で push しても `release.yaml` は起動する。リリースノートは GitHub 自動生成 (`generate_release_notes: true`) で、前回のタグからの PR/コミットが列挙される。
+A release starts with merging a version-bump PR (a PR that changes only the version in `package.json` and `package-lock.json`). When CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) run by the push to main succeeds, [.github/workflows/tag-release.yaml](.github/workflows/tag-release.yaml) tags the merge commit with `vX.Y.Z` and triggers [.github/workflows/release.yaml](.github/workflows/release.yaml) on that tag. `release.yaml` runs the Windows + macOS builds and creates a draft release. A push that does not change the version creates no tag, and when a tag with the same name already exists, the tag is not moved. Pushing a `v*.*.*` tag by hand also triggers `release.yaml`. The release notes are generated automatically by GitHub (`generate_release_notes: true`) and list the PRs/commits since the previous tag.
 
-更新が semver の patch である Dependabot の PR は、main の必須チェック (`action-pins`・`Test 🧪`・`auto-merge`) が通ると自動でマージされる ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml))。それ以外の更新は人がマージする。自動マージによるマージは main への push でワークフローを起動しない。
+Dependabot PRs whose update is a semver patch are merged automatically once main's required checks (`action-pins`, `Test 🧪`, `auto-merge`) pass ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml)). Other updates are merged by a person. Merges by auto-merge do not trigger workflows with the push to main.
 
-macOS 署名・公証には以下の GitHub Secrets が必要 (未設定でもビルドは継続し、署名・公証なしの DMG が生成される):
+macOS signing and notarization need the following GitHub Secrets (the build continues without them and produces a DMG without signing or notarization):
 
-| Secret 名 | 用途 |
+| Secret name | Purpose |
 |---|---|
-| `MACOS_SIGNING_CERT` | Developer ID Application 証明書 (base64 エンコードした `.p12`) |
-| `MACOS_SIGNING_CERT_PASSWORD` | `.p12` のパスワード |
-| `MACOS_NOTARIZATION_USERNAME` | Apple ID (メールアドレス) |
-| `MACOS_NOTARIZATION_PASSWORD` | App 用パスワード |
+| `MACOS_SIGNING_CERT` | Developer ID Application certificate (base64-encoded `.p12`) |
+| `MACOS_SIGNING_CERT_PASSWORD` | Password of the `.p12` |
+| `MACOS_NOTARIZATION_USERNAME` | Apple ID (email address) |
+| `MACOS_NOTARIZATION_PASSWORD` | App-specific password |
 | `MACOS_NOTARIZATION_TEAM_ID` | Apple Developer Team ID |
 
-`.p12` を base64 化する例:
+Example of base64-encoding the `.p12`:
 ```bash
 base64 -i cert.p12 -o cert.p12.b64  # macOS
 gh secret set MACOS_SIGNING_CERT < cert.p12.b64
 ```
 
-macOS ランナー上では証明書を `$RUNNER_TEMP` 配下の永続キーチェーンにインポートしてから `dist:mac` を実行する。これは electron-builder の `CSC_LINK` 経路が使う一時キーチェーンが署名後に破棄され、後段の `notarize-dmg.cjs` で identity を見失う問題を回避するため。
+On the macOS runner, the certificate is imported into a persistent keychain under `$RUNNER_TEMP` before `dist:mac` runs. This avoids the problem where the temporary keychain used by electron-builder's `CSC_LINK` path is discarded after signing and the later `notarize-dmg.cjs` loses the identity.
 
-Windows 側は現状コード署名未設定のため、追加の Secret は不要。
+Code signing is not set up on Windows at present, so no additional Secret is needed.
 
-### 自動更新 (auto-update)
+### Auto-update
 
-パッケージ版アプリは起動時に GitHub Releases を参照して新バージョンを確認し、差分ダウンロード後、アプリ終了時に自動適用する ([electron-updater](https://www.electron.build/auto-update))。開発モード (`npm run electron`) では自動更新処理はスキップされる。
+The packaged app checks GitHub Releases for a new version on launch, downloads the difference, and applies it automatically when the app quits ([electron-updater](https://www.electron.build/auto-update)). In development mode (`npm run electron`), auto-update is skipped.
 
-**リリース公開の運用**: ワークフローはドラフトリリースを作成するが、electron-updater はドラフトを検出しない。版上げ PR のマージ → `release.yaml` の完了後、GitHub 上でリリースを手動 publish することで初めてインストール済みクライアントに更新が配信される。
+**Publishing a release**: the workflow creates a draft release, but electron-updater does not detect drafts. Only after merging the version-bump PR → `release.yaml` finishing, and publishing the release manually on GitHub, is the update delivered to installed clients.
 
-**macOS 制約**: auto-update は署名済みビルドでのみ動作する。unsigned DMG をインストールした場合、自動更新の検証段階で Gatekeeper が差分を拒否するため手動アップデートが必要。
+**macOS limitation**: auto-update works only with signed builds. If an unsigned DMG is installed, Gatekeeper rejects the difference at the verification stage of auto-update, so updates must be done manually.
 
-## ライセンス
+## License
 
 MIT

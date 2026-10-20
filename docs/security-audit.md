@@ -1,305 +1,305 @@
-# セキュリティ監査レポート
+# Security audit report
 
-**対象**: jimaku-translator v1.0.9
-**日付**: 2026-04-17 (「CI/CD (GitHub Actions) のセキュリティ」節の「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行は 2026-09-30 に確認、同節の `tag-release.yaml` と `check-event` の記述は 2026-10-20 に追加)
-**スコープ**: HTTP サーバー (`server.ts`)、Electron メインプロセス (`electron.ts`)、Web UI (`ui/index.html`)、パイプライン (`pipeline.ts`)、音声レベル処理 (`audio/level.ts`)、Whisper プロセス管理 (`whisper-process.ts`)、Whisper セットアップ (`whisper-setup.ts`)、OBS クライアント (`obs/client.ts`)、ビルドフック (`build/afterPack.cjs`)
+**Target**: jimaku-translator v1.0.9
+**Date**: 2026-04-17 (in the "CI/CD (GitHub Actions) security" section, the 3 rows "Workflow triggers", "`permissions`" and "Pinning external actions" were checked on 2026-09-30, and the descriptions of `tag-release.yaml` and `check-event` in the same section were added on 2026-10-20)
+**Scope**: HTTP server (`server.ts`), Electron main process (`electron.ts`), Web UI (`ui/index.html`), pipeline (`pipeline.ts`), audio level processing (`audio/level.ts`), Whisper process management (`whisper-process.ts`), Whisper setup (`whisper-setup.ts`), OBS client (`obs/client.ts`), build hook (`build/afterPack.cjs`)
 
-## 概要
+## Overview
 
-jimaku-translator は `127.0.0.1:9880` でローカル HTTP サーバーを公開する。外部ネットワークからはアクセス不可 (localhost バインド)。Electron ウィンドウは `nodeIntegration: false`, `contextIsolation: true` で動作する。
+jimaku-translator exposes a local HTTP server on `127.0.0.1:9880`. It cannot be reached from external networks (localhost bind). The Electron window runs with `nodeIntegration: false`, `contextIsolation: true`.
 
-## 攻撃面
+## Attack surface
 
-| 攻撃面 | リスク | 対策状況 |
+| Attack surface | Risk | Mitigation status |
 |--------|--------|----------|
-| HTTP サーバー (localhost:9880) | ローカルアプリケーションからのアクセス | localhost バインドで外部公開なし |
-| POST /api/config | 設定ファイル書き込み | 入力バリデーション + TOML エスケープ実装済み |
-| POST /api/capture | 音声キャプチャ WAV 出力 | localhost バインド、最大 30 秒制限、タイムアウト付き |
-| GET /api/obs/sources | OBS テキストソース列挙 | localhost バインド、読み取り専用 |
-| POST /api/whisper/download-binary | 外部バイナリダウンロード | GitHub Releases の固定 URL のみ。リダイレクト上限 10。macOS は `brew install` |
-| POST /api/whisper/download-model | 外部モデルダウンロード | HuggingFace の固定 URL のみ。リダイレクト上限 10 |
-| whisper-server 子プロセス | バイナリ実行 | ダウンロード済み or config 指定パスのみ実行 |
-| Homebrew バイナリ検出 | シンボリックリンク差し替え | `realpathSync` でリンク先を解決し、Cellar 配下の実ファイルのみ許可 |
-| `brew install` 実行 | Homebrew 経由のパッケージインストール | 絶対パス (`/opt/homebrew/bin/brew`) で `execFileAsync` 使用。引数は固定 |
-| afterPack ビルドフック | Info.plist 書き換え | `execFileSync` + 引数配列で PlistBuddy 呼び出し。シェル解釈なし |
-| VBAN UDP (port 6980) | 不正パケット受信 | パーサーがヘッダ検証、全フォーマット対応 |
-| POST /api/config → VBAN ポート変更 | ランタイム UDP ソケット再バインド | ポート変更は localhost API 経由のみ。バインド失敗時はステータスをリセット |
-| OBS WebSocket | 認証情報 (パスワード) | config.local.toml に保存 (.gitignore 済み) |
-| Electron ウィンドウ | XSS / コード実行 | contextIsolation + nodeIntegration 無効 |
-| SSE ストリーム | download-progress イベント | 秘密情報なし。ファイル名とバイト数のみ |
+| HTTP server (localhost:9880) | Access from local applications | localhost bind, not exposed externally |
+| POST /api/config | Writing the settings file | Input validation + TOML escaping implemented |
+| POST /api/capture | Audio capture WAV output | localhost bind, 30-second maximum, with a timeout |
+| GET /api/obs/sources | Enumerating OBS text sources | localhost bind, read-only |
+| POST /api/whisper/download-binary | Downloading external binaries | Only fixed GitHub Releases URLs. Redirect limit 10. `brew install` on macOS |
+| POST /api/whisper/download-model | Downloading external models | Only fixed HuggingFace URLs. Redirect limit 10 |
+| whisper-server child process | Binary execution | Only downloaded paths or paths specified in config are executed |
+| Homebrew binary detection | Symbolic link substitution | Resolves the link target with `realpathSync` and allows only real files under Cellar |
+| Running `brew install` | Package installation through Homebrew | Uses `execFileAsync` with an absolute path (`/opt/homebrew/bin/brew`). Fixed arguments |
+| afterPack build hook | Rewriting Info.plist | Calls PlistBuddy with `execFileSync` + an argument array. No shell interpretation |
+| VBAN UDP (port 6980) | Receiving malformed packets | The parser validates the header and supports every format |
+| POST /api/config → VBAN port change | Rebinding the UDP socket at runtime | Port changes only through the localhost API. Status is reset when binding fails |
+| OBS WebSocket | Credentials (password) | Saved in config.local.toml (in .gitignore) |
+| Electron window | XSS / code execution | contextIsolation + nodeIntegration disabled |
+| SSE stream | download-progress events | No secrets. Only file names and byte counts |
 
-## 検出された問題と対策
+## Issues found and fixes
 
-### 修正済み
+### Fixed
 
-1. **TOML インジェクション (S2)**
-   - `POST /api/config` で送信された文字列値が TOML にエスケープなしで書き込まれていた
-   - `escapeTomlString()` を追加し、`"`, `\`, `\n`, `\r` をエスケープ
+1. **TOML injection (S2)**
+   - String values sent to `POST /api/config` were written to TOML without escaping
+   - Added `escapeTomlString()`, which escapes `"`, `\`, `\n`, `\r`
 
-2. **JSON 入力の型検証なし (S2)**
-   - `JSON.parse(body) as Config` で型アサーションのみ、構造検証なし
-   - `parseConfigInput()` で全フィールドの型チェックを追加
+2. **No type validation of JSON input (S2)**
+   - `JSON.parse(body) as Config` was only a type assertion with no structural validation
+   - Added type checks of every field in `parseConfigInput()`
 
-3. **リクエストボディサイズ無制限 (S3)**
-   - `readBody()` がサイズ制限なしでメモリに蓄積していた
-   - 64KB 上限を追加、超過時は接続切断
+3. **Unlimited request body size (S3)**
+   - `readBody()` accumulated the body in memory without a size limit
+   - Added a 64KB limit; the connection is closed when it is exceeded
 
-4. **サーバーエラーハンドリング不足 (S4)**
-   - `server.listen()` の `EADDRINUSE` エラーが未処理だった
-   - `index.ts`, `electron.ts` 両方にエラーハンドラ追加
+4. **Insufficient server error handling (S4)**
+   - The `EADDRINUSE` error of `server.listen()` was not handled
+   - Added error handlers to both `index.ts` and `electron.ts`
 
-5. **getObs() 初期化前アクセス (S2)**
-   - Pipeline.start() 完了前に `/api/obs/sources` が呼ばれると undefined
-   - `getObs()` の戻り型を `ObsClient | null` に変更、null ガード追加
+5. **getObs() access before initialization (S2)**
+   - If `/api/obs/sources` is called before Pipeline.start() completes, the result is undefined
+   - Changed the return type of `getObs()` to `ObsClient | null` and added a null guard
 
-6. **captureAudio promise リーク (S2)**
-   - パイプライン停止時や VBAN ストリーム切断時に capture promise が永久に解決しない
-   - タイムアウト (2x duration + 5s) と `stop()` 時の reject を追加
+6. **captureAudio promise leak (S2)**
+   - When the pipeline stops or the VBAN stream disconnects, the capture promise never resolves
+   - Added a timeout (2x duration + 5s) and a reject on `stop()`
 
-7. **downloadFile 不完全ダウンロード (S3)**
-   - HTTP 接続が途中で切断された場合、不完全なファイルが正常としてディスクに残る
-   - Content-Length と実際のダウンロードバイト数の比較を追加、不一致時は削除
+7. **downloadFile incomplete download (S3)**
+   - If the HTTP connection is cut midway, the incomplete file stays on disk as if it were complete
+   - Added a comparison of Content-Length with the number of bytes actually downloaded; the file is deleted on mismatch
 
-8. **downloadFile レスポンスストリームエラー未処理 (S3)**
-   - `res.on('error')` が未登録。ネットワーク切断時にエラーが伝播しない
-   - `res.on('error')` ハンドラを追加、ファイル削除 + reject
+8. **downloadFile response stream errors not handled (S3)**
+   - `res.on('error')` was not registered. Errors did not propagate when the network was cut
+   - Added a `res.on('error')` handler that deletes the file + rejects
 
-9. **processQueue 状態リセット漏れ (S3)**
-   - `stop()` が `inferring` と `inferQueue` をリセットしない
-   - stop → start の再起動で推論キューが詰まる
-   - `stop()` でリセットを追加
+9. **processQueue state not reset (S3)**
+   - `stop()` did not reset `inferring` and `inferQueue`
+   - Restarting with stop → start left the inference queue stuck
+   - Added the reset to `stop()`
 
-10. **logBuffer 無制限成長 (S4)**
-    - パイプラインが長時間稼働するとログバッファがメモリを圧迫
-    - 500 エントリ上限を追加
+10. **Unbounded growth of logBuffer (S4)**
+    - When the pipeline runs for a long time, the log buffer puts pressure on memory
+    - Added a 500-entry limit
 
-11. **VAD feedQueue Promise チェーン断絶 (S2)**
-    - `feedInternal` が一度 reject すると feedQueue チェーンが永続的に壊れ、以降の全 feed() がスキップ
-    - `.catch(() => {})` で前回のエラーを吸収してチェーンを維持
+11. **VAD feedQueue promise chain breaking (S2)**
+    - Once `feedInternal` rejected, the feedQueue chain was permanently broken and every later feed() was skipped
+    - Absorbs the previous error with `.catch(() => {})` to keep the chain
 
-12. **ダウンロード完了時のチェックサム未検証 (S3)**
-    - ダウンロード完了ファイルのデータ整合性を検証する手段がなかった
-    - SHA-256 ハッシュをストリーミング計算し `.sha256` サイドカーファイルに保存
-    - `getInstalledModel` / `getInstalledBinary` はサイドカー不在で未インストール扱い
+12. **Checksum not verified on download completion (S3)**
+    - There was no way to verify the data integrity of a downloaded file
+    - Computes a SHA-256 hash while streaming and saves it in a `.sha256` sidecar file
+    - `getInstalledModel` / `getInstalledBinary` treat a missing sidecar as not installed
 
-13. **同一リソースの重複ダウンロード (S3)**
-    - 同じモデル/バリアントのダウンロードを並行して開始できた
-    - `downloadingResources` Set でリソース ID を追跡、409 で拒否
+13. **Duplicate downloads of the same resource (S3)**
+    - Downloads of the same model/variant could be started in parallel
+    - Tracks resource IDs in the `downloadingResources` Set and rejects with 409
 
-14. **Homebrew バイナリ検出のシンボリックリンク検証 (S3)**
-    - `detectHomebrewWhisperServer()` が `fs.existsSync()` でシンボリックリンクを無検証で透過していた
-    - 攻撃者がローカルに `whisper-server` → 悪意あるバイナリのシンボリックリンクを作成可能
-    - `fs.realpathSync()` でリンク先を解決し、Homebrew Cellar 配下 (`prefix/Cellar/`) の実ファイルのみ許可
+14. **Symbolic link validation in Homebrew binary detection (S3)**
+    - `detectHomebrewWhisperServer()` passed through symbolic links with `fs.existsSync()` without validating them
+    - An attacker could create a local symbolic link `whisper-server` → a malicious binary
+    - Resolves the link target with `fs.realpathSync()` and allows only real files under the Homebrew Cellar (`prefix/Cellar/`)
 
-15. **afterPack ビルドフックのコマンドインジェクション防止 (S3)**
-    - PlistBuddy 呼び出しが `execSync` + テンプレートリテラルでシェル解釈を経由していた
-    - `execFileSync` + 引数配列に変更し、シェル解釈を完全に排除
+15. **Command injection prevention in the afterPack build hook (S3)**
+    - The PlistBuddy call went through shell interpretation with `execSync` + a template literal
+    - Changed to `execFileSync` + an argument array, removing shell interpretation entirely
 
-16. **OBS 字幕送信エラーによる推論結果消失防止 (S3)**
-    - `subtitle.show()` のエラーが `processQueue` の try-catch に巻き込まれ、「Inference failed」として報告されていた
-    - 推論結果の保持 (`lastResult`) は成功していたが、OBS 字幕更新失敗が推論失敗と区別できなかった
-    - `subtitle.show()` を個別 catch で処理し、推論エラーと OBS エラーを分離
+16. **Preventing loss of inference results from OBS subtitle send errors (S3)**
+    - Errors from `subtitle.show()` were caught by the try-catch of `processQueue` and reported as "Inference failed"
+    - Keeping the inference result (`lastResult`) succeeded, but an OBS subtitle update failure could not be told apart from an inference failure
+    - Handles `subtitle.show()` with its own catch, separating inference errors from OBS errors
 
-17. **多重起動防止 (S4)**
-    - Electron アプリが多重起動可能で、ポート競合 (9880, 6980) やリソース競合が発生していた
-    - `app.requestSingleInstanceLock()` で多重起動を防止。2 回目の起動は既存ウィンドウをフォーカス
+17. **Preventing multiple instances (S4)**
+    - The Electron app could be launched multiple times, causing port conflicts (9880, 6980) and resource conflicts
+    - Prevents multiple instances with `app.requestSingleInstanceLock()`. A second launch focuses the existing window
 
-18. **OBS 初回接続失敗時の自動再接続不能 (S2)**
-    - OBS Studio より先に jimaku-translator を起動すると、初回 `connect()` 失敗後に再接続がスケジュールされない
-    - `connect()` 失敗時に `scheduleReconnect()` を呼び出すよう修正。リスナー登録を `setupListeners()` に分離し接続試行前に実行
+18. **No automatic reconnection after the first OBS connection fails (S2)**
+    - When jimaku-translator was started before OBS Studio, no reconnection was scheduled after the first `connect()` failed
+    - Fixed to call `scheduleReconnect()` when `connect()` fails. Moved listener registration into `setupListeners()`, run before the connection attempt
 
-19. **VBAN ポート再バインド失敗時のステータス不整合 (S2)**
-    - 設定変更でポートを使用中ポートに変更 → `stop()` → `start()` 失敗 → `vbanListening` が `true` のまま
-    - `updateVbanConfig` でポート変更時に `vbanListening` を `false` にリセット。`listening` イベントで復帰
+19. **Inconsistent status when rebinding the VBAN port fails (S2)**
+    - Changing the port to a port in use in the settings → `stop()` → `start()` fails → `vbanListening` stays `true`
+    - `updateVbanConfig` resets `vbanListening` to `false` when the port changes. It recovers on the `listening` event
 
-20. **VAD feedQueue の無制限成長 (S2)**
-    - `vad.feed()` が fire-and-forget で呼ばれるため、ONNX 推論が音声到着速度に追いつかない場合、未処理の Promise が無制限に蓄積
-    - `feedQueueDepth` カウンタで深さ 4 を上限とし、超過時は新しい feed をドロップ
+20. **Unbounded growth of the VAD feedQueue (S2)**
+    - Because `vad.feed()` is called fire-and-forget, unprocessed promises piled up without limit when ONNX inference could not keep up with the audio arrival rate
+    - Limits the depth to 4 with the `feedQueueDepth` counter and drops new feeds beyond it
 
-21. **VAD LSTM 状態の飽和 (S3)**
-    - Silero VAD の LSTM 隠れ状態が長時間の連続音声入力でドリフトし、speech 検出精度が低下
-    - 30 秒間の非発話継続で `resetState()` を自動呼び出しし、LSTM 状態をゼロクリア
+21. **Saturation of the VAD LSTM state (S3)**
+    - The LSTM hidden state of Silero VAD drifts under long continuous audio input, lowering speech detection accuracy
+    - Calls `resetState()` automatically after 30 seconds of continuous non-speech, zeroing the LSTM state
 
-22. **発話先頭の音声欠損 (S3)**
-    - VAD が speech と判定するのは実際の発話開始から 50-150ms 遅れるため、子音や息などの立ち上がりが欠損し認識精度が低下
-    - 500ms の pre-speech リングバッファ (`preSpeechBuffer`) を保持し、speech 検出時に前置。メモリ上限は 8000 samples (16KB)
+22. **Loss of audio at the start of speech (S3)**
+    - VAD decides on speech 50-150ms after the actual start of speech, so onsets such as consonants and breaths were lost, lowering recognition accuracy
+    - Keeps a 500ms pre-speech ring buffer (`preSpeechBuffer`) and prepends it when speech is detected. The memory limit is 8000 samples (16KB)
 
-23. **VAD 最大発話長分割の不動作 (S2)**
-    - `processChunk` の最大発話長強制分割 (`speechSampleCount >= maxSpeechSamples`) が `prob >= threshold` ブランチ内にしかなく、Silero の母音飽和で prob が崩壊し、かつ continuationRmsFloor で `silenceSamples=0` に固定された場合、発話セグメントが無制限に成長し Whisper Dispatch が発火しない
-    - silence ブランチ側にも `else if (this.speechSampleCount >= maxSpeechSamples) { this.emitSpeech(); }` を追加し、prob 状態に依らず最大長で確実に分割
-    - メモリ枯渇には至らないが (16kHz × maxSpeechMs で上限あり)、長大セグメントが whisper-server に送信され遅延が累積する DoS 類似の影響を排除
+23. **Maximum speech length split not working (S2)**
+    - The forced split at the maximum speech length in `processChunk` (`speechSampleCount >= maxSpeechSamples`) was only inside the `prob >= threshold` branch, so when prob collapsed from Silero's vowel saturation and `silenceSamples=0` was pinned by continuationRmsFloor, the speech segment grew without limit and Whisper Dispatch never fired
+    - Added `else if (this.speechSampleCount >= maxSpeechSamples) { this.emitSpeech(); }` to the silence branch as well, so the segment is always split at the maximum length regardless of the prob state
+    - It did not lead to memory exhaustion (bounded by 16kHz × maxSpeechMs), but removes a DoS-like effect where long segments were sent to whisper-server and delay accumulated
 
-24. **適応ゲート設定値のバリデーション (S4)**
-    - `audio.adaptive_gate_*` 4 フィールドを追加 (`adaptive_gate_enabled`, `adaptive_gate_margin_db`, `adaptive_gate_window_sec`, `adaptive_gate_max_db`)
-    - `validateConfig()` で範囲制約を実施: `margin_db >= 0`, `window_sec > 0`, `max_db <= -10`, `max_db >= rms_gate_db`
-    - GUI から不正値が POST されてもバリデーションで弾かれ、ファイル書き込みに到達しない
-    - 新規攻撃面なし (内部数値計算のみ、外部入出力なし)
+24. **Validation of adaptive gate settings (S4)**
+    - Added 4 `audio.adaptive_gate_*` fields (`adaptive_gate_enabled`, `adaptive_gate_margin_db`, `adaptive_gate_window_sec`, `adaptive_gate_max_db`)
+    - `validateConfig()` enforces range constraints: `margin_db >= 0`, `window_sec > 0`, `max_db <= -10`, `max_db >= rms_gate_db`
+    - Even if invalid values are POSTed from the GUI, validation rejects them before they reach the file write
+    - No new attack surface (internal numerical computation only, no external input/output)
 
-25. **低音量入力時の認識精度低下 (S3)**
-    - Whisper は学習データ分布に近い -3 〜 -6 dBFS 付近で最も精度が高いが、OBS 側入力レベルが低いと認識品質が劣化
-    - `src/audio/level.ts` に `computeRms` / `normalizeToTarget` を追加
-    - VAD が emit した発話セグメントを RMS 測定し `audio.normalize_target_dbfs` (デフォルト -6) まで増幅 (最大 +20 dB、減衰なし、INT16 クリップ)
-    - RMS ゲート (`audio.rms_gate_db`、デフォルト -60、上限 -30) で VAD 前に足切りを行い、ノイズ誤検出と CPU 負荷を削減
-    - 入力は全て内部計算で境界が明確 (Int16 PCM、サンプル数上限、ゲート閾値上限 `-30 dBFS`)。新規攻撃面なし
+25. **Lower recognition accuracy with low-volume input (S3)**
+    - Whisper is most accurate around -3 to -6 dBFS, close to its training data distribution, and recognition quality degrades when the input level on the OBS side is low
+    - Added `computeRms` / `normalizeToTarget` to `src/audio/level.ts`
+    - Measures the RMS of the speech segment emitted by VAD and amplifies it to `audio.normalize_target_dbfs` (default -6) (at most +20 dB, no attenuation, INT16 clipping)
+    - The RMS gate (`audio.rms_gate_db`, default -60, upper limit -30) cuts off audio before VAD, reducing false detections from noise and CPU load
+    - All inputs are internal computations with clear bounds (Int16 PCM, sample count limit, gate threshold upper limit `-30 dBFS`). No new attack surface
 
-26. **翻訳結果への改行混入による OBS 字幕崩れ (S3)**
-    - whisper-server が `\n` を含む翻訳テキストを返すと、`subtitle.show()` がそのまま OBS WebSocket に転送し、テキストソースが意図せず複数行表示
-    - `pipeline.ts` の recognition emit 前段と `subtitle/manager.ts` の `show()` 入口の二段で `[\r\n]+` を空白に畳み込む正規化を実施 (defense in depth)
-    - 第三者による injection ではなく、上流モデルの非決定的出力が原因。XSS/コマンド注入リスクは無いが、UX 品質劣化として S3 扱い
+26. **Broken OBS subtitles from line breaks in translation results (S3)**
+    - When whisper-server returned translation text containing `\n`, `subtitle.show()` forwarded it to OBS WebSocket as is, and the text source unintentionally showed multiple lines
+    - Normalizes by collapsing `[\r\n]+` into a space in two places, before the recognition emit in `pipeline.ts` and at the entry of `show()` in `subtitle/manager.ts` (defense in depth)
+    - The cause is non-deterministic output of the upstream model, not injection by a third party. There is no XSS/command injection risk, but it is treated as S3 for UX quality degradation
 
-27. **OBS 再接続失敗ログのスパム (S4)**
-    - `obs/client.ts` の自動再接続が失敗するたびに同一エラーが Log パネルに大量出力され、本来の警告が埋もれる可観測性低下
-    - 60 秒ウィンドウで連続同一エラーを抑制し、再発時にサマリー (`suppressed N similar errors over Ms`) を 1 行に集約
-    - 抑制は文字列キー一致のみで、異なるエラー (DNS 失敗 → 認証失敗等) は即座に通知される
+27. **OBS reconnection failure log spam (S4)**
+    - Each time the automatic reconnection in `obs/client.ts` failed, the same error was output to the Log panel in large volume, burying real warnings and reducing observability
+    - Suppresses consecutive identical errors in a 60-second window and collapses them into a 1-line summary (`suppressed N similar errors over Ms`) when they recur
+    - Suppression matches only on the string key, so different errors (DNS failure → authentication failure, etc.) are reported immediately
 
-28. **CLI/Electron データディレクトリの不整合 (S2)**
-    - 旧版は CLI が `~/.jimaku-translator/whisper`、Electron が `app.getPath('userData')` を参照し、ダウンロード済みモデルが二重管理されていた
-    - `getJimakuDataRoot()` で OS 標準の userData (Electron と同一) に統一し、`JIMAKU_DATA_DIR` 環境変数で上書き可能に
-    - 起動時に `migrateLegacyDataIfNeeded()` で旧パスをシンボリックリンク (失敗時はコピー) で新パスへ移行
-    - macOS の小文字 product name (`jimaku-translator`) と Windows の `%APPDATA%/jimaku-translator/whisper` も migration 候補に追加
+28. **Inconsistent CLI/Electron data directories (S2)**
+    - Older versions referred to `~/.jimaku-translator/whisper` from the CLI and to `app.getPath('userData')` from Electron, so downloaded models were managed in two places
+    - Unified on the OS-standard userData (same as Electron) with `getJimakuDataRoot()`, overridable with the `JIMAKU_DATA_DIR` environment variable
+    - On startup, `migrateLegacyDataIfNeeded()` migrates the old path to the new path with a symbolic link (a copy if that fails)
+    - Also added the lowercase product name on macOS (`jimaku-translator`) and Windows' `%APPDATA%/jimaku-translator/whisper` as migration candidates
 
-29. **Migration 部分コピーによるデータ整合性破損 (S2)**
-    - シンボリックリンク不可な環境で `cpSync` がディスクフル等で途中失敗すると、`targetDir` に部分コピーが残存
-    - 次回起動時 `fs.existsSync(targetDir)` が真となり migration がスキップされ、欠落モデルを「正常」と誤認
-    - 一時 staging dir (`<targetDir>.migrating-<pid>`) へコピー → `fs.renameSync` でアトミックに昇格、失敗時は `fs.rmSync` で staging を削除
-    - 攻撃面ではないが、無音失敗によるデータ破損リスクとして S2 扱い
+29. **Data integrity corruption from a partial migration copy (S2)**
+    - In environments where symbolic links are not possible, if `cpSync` failed midway from a full disk or similar, a partial copy remained in `targetDir`
+    - On the next startup, `fs.existsSync(targetDir)` was true so the migration was skipped, and missing models were mistaken for "complete"
+    - Copies to a temporary staging dir (`<targetDir>.migrating-<pid>`) → promotes it atomically with `fs.renameSync`, and deletes the staging dir with `fs.rmSync` on failure
+    - Not an attack surface, but treated as S2 as a risk of data corruption from a silent failure
 
-30. **VAD 発話末尾の句点欠落 (S4)**
-    - Silero VAD が `silenceMs` 経過時点で発話末尾を切ると、Whisper が句点 (「。」) を出力するための末尾無音余韻が不足
-    - `silenceMs` 判定に 125ms の `TAIL_PAD_SAMPLES` を加算し、Whisper に自然な文末を見せる
-    - セキュリティ影響なし。UX 品質改善
+30. **Missing final period at the end of VAD speech (S4)**
+    - When Silero VAD cut the end of speech as soon as `silenceMs` elapsed, there was not enough trailing silence for Whisper to output the sentence-final period ("。")
+    - Adds a 125ms `TAIL_PAD_SAMPLES` to the `silenceMs` decision so that Whisper sees a natural end of sentence
+    - No security impact. A UX quality improvement
 
-31. **VAD LSTM 長時間ドリフトの短縮 (S3)**
-    - 30 秒の LSTM 自動リセット間隔では、長時間の連続無発話後に隠れ状態が偏り、その後の発話で prob が立ち上がらない事象を確認
-    - リセット間隔を 30s → 3s に短縮 (`SILENCE_RESET_SAMPLES = 16000 * 3`)
-    - メモリ・CPU 影響軽微 (LSTM は 128 次元、reset 自体は O(1))
+31. **Shortening long-term VAD LSTM drift (S3)**
+    - With a 30-second LSTM automatic reset interval, a case was confirmed where the hidden state became biased after a long continuous stretch without speech, and prob did not rise for the next speech
+    - Shortened the reset interval from 30s → 3s (`SILENCE_RESET_SAMPLES = 16000 * 3`)
+    - Minor memory/CPU impact (the LSTM has 128 dimensions, and the reset itself is O(1))
 
-32. **CORS ワイルドカード許可 (S3)**
-    - `Access-Control-Allow-Origin: *` で任意 origin からの preflight を受け入れていた
-    - localhost 上の別ポートで動作する第三者ページから cookie なし fetch で API が叩ける状態
-    - `Origin` ヘッダが `http://127.0.0.1:*` / `http://localhost:*` の場合のみ該当 origin を返し、それ以外は CORS ヘッダを付与しない実装に変更 (`src/server.ts`)
-    - Electron (`loadURL('http://127.0.0.1:9880/')`) と Playwright (`baseURL` 同じ) は同一 origin のため影響なし
+32. **CORS wildcard allowed (S3)**
+    - Preflights from any origin were accepted with `Access-Control-Allow-Origin: *`
+    - A third-party page running on another port on localhost could call the API with a cookie-less fetch
+    - Changed to return the origin only when the `Origin` header is `http://127.0.0.1:*` / `http://localhost:*`, and to add no CORS headers otherwise (`src/server.ts`)
+    - Electron (`loadURL('http://127.0.0.1:9880/')`) and Playwright (same `baseURL`) are same-origin and unaffected
 
-33. **Windows `extractZip` の zip slip 対策 (S2)**
-    - `Expand-Archive` は zip エントリの相対パスを検証しないため、`../../` を含む悪意 zip で destDir 外に書き込まれる可能性
-    - 展開後に `readdirSync(destDir, { recursive: true })` で全エントリを列挙し、`path.resolve()` が `destDir` プレフィックス外なら `rmSync` で destDir ごと巻き戻し + throw
-    - ダウンロード URL はハードコード (GitHub Releases) のため実用リスクは低いが、MITM 環境や将来の設定拡張時に備えた事前対策
+33. **Zip slip protection in Windows `extractZip` (S2)**
+    - `Expand-Archive` does not validate the relative paths of zip entries, so a malicious zip containing `../../` could write outside destDir
+    - After extraction, enumerates every entry with `readdirSync(destDir, { recursive: true })`, and if `path.resolve()` is outside the `destDir` prefix, rolls back the whole destDir with `rmSync` + throws
+    - The download URLs are hard-coded (GitHub Releases), so the practical risk is low, but this is a precaution for MITM environments and future configuration extensions
 
-34. **PowerShell コマンドインジェクション対策 (S2)**
-    - `extractZip` が `powershell -Command "Expand-Archive -Path ${zipPath} ..."` 形式でパスを文字列補間していた
-    - `execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', 'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force', '--', zipPath, destDir])` に変更
-    - `-LiteralPath` への切り替えで `[`, `]`, `*` 等のワイルドカード展開も抑止
-    - 他のシェル実行箇所 (`nvidia-smi`, `brew install`, `dns-sd`, `whisper-server` spawn) も引数配列形式で既に対策済み (横展開チェック完了)
+34. **PowerShell command injection protection (S2)**
+    - `extractZip` interpolated paths into a string in the form `powershell -Command "Expand-Archive -Path ${zipPath} ..."`
+    - Changed to `execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', 'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force', '--', zipPath, destDir])`
+    - Switching to `-LiteralPath` also suppresses wildcard expansion such as `[`, `]`, `*`
+    - Other shell execution sites (`nvidia-smi`, `brew install`, `dns-sd`, `whisper-server` spawn) already use the argument array form (cross-site check done)
 
-35. **config.local.toml 破損時の起動クラッシュ (S3)**
-    - `loadConfig()` 内 `smol-toml.parse()` が破損 TOML で throw するが、`src/index.ts` / `src/electron.ts` は catch せずプロセス終了
-    - ユーザーが GUI で設定を編集中にクラッシュした場合、次回起動できず復旧手段が不明
-    - `src/config.ts` で `config.local.toml` のパース失敗時のみ DEFAULTS にフォールバック + `console.warn` でログ出力。ベース `config.toml` 失敗は従来通り throw
-    - 攻撃面ではなく可用性の堅牢化
+35. **Startup crash when config.local.toml is corrupted (S3)**
+    - `smol-toml.parse()` in `loadConfig()` throws on corrupted TOML, but `src/index.ts` / `src/electron.ts` did not catch it and the process exited
+    - If a crash happened while the user was editing settings in the GUI, the app could not start the next time and there was no obvious way to recover
+    - `src/config.ts` falls back to DEFAULTS + logs with `console.warn` only when parsing `config.local.toml` fails. A failure of the base `config.toml` throws as before
+    - Not an attack surface; an availability hardening
 
-36. **`audio.rmsDb` の -Infinity JSON 直列化 (S4)**
-    - `JSON.stringify(Number.NEGATIVE_INFINITY)` は `null` を返すため、UI 側が `null` と真の「未計測」を区別できない
-    - `src/pipeline.ts` で `lastFrameRmsLinear <= 0` 時に `-200` (有限値) を返すよう変更。JSON 直列化後も数値として解釈可能
+36. **-Infinity JSON serialization of `audio.rmsDb` (S4)**
+    - `JSON.stringify(Number.NEGATIVE_INFINITY)` returns `null`, so the UI side could not tell `null` from a real "not measured"
+    - Changed `src/pipeline.ts` to return `-200` (a finite value) when `lastFrameRmsLinear <= 0`. It can still be read as a number after JSON serialization
 
-37. **SSE log replay のフラッディング抑制 (S4)**
-    - 新規 SSE 接続時に `logBuffer` 最大 500 件が一度に送出され、低速接続でバックプレッシャー無しに帯域を圧迫
-    - `src/server.ts` で `getLogBuffer().slice(-100)` に変更。最新 100 件のみ replay
-    - Reconnect 頻発環境でのメモリ・帯域累積を抑制
+37. **Suppressing SSE log replay flooding (S4)**
+    - On a new SSE connection, up to 500 entries of `logBuffer` were sent at once, putting pressure on bandwidth with no backpressure on slow connections
+    - Changed `src/server.ts` to `getLogBuffer().slice(-100)`. Replays only the latest 100 entries
+    - Reduces accumulated memory and bandwidth in environments with frequent reconnects
 
-38. **Web UI アクセシビリティ強化 (S4)**
-    - WCAG 2.1 AA 準拠に向けて以下を整備:
-      - タッチターゲット 32px 以上 (WCAG 2.5.8)
-      - `<main>` / ARIA landmark で文書構造を明示 (h1 はウィンドウタイトル `<title>` と重複するため省略)
-      - 折りたたみトグルを `<h2>/<h3><button>` 入れ子構造に変更しセマンティクス重複を解消
-      - `.toast` に `role="alert" aria-live="assertive"`、`<canvas>` に `role="img" aria-label`
-      - `#config-toggle` / `#audio-monitor-toggle` / `#log-toggle` に `aria-controls`
-      - range スライダーに `aria-valuetext` を `oninput` で同期、対応する値 span に `aria-hidden="true"`
-      - `.indicator` 全てに `aria-hidden="true"` (色のみ情報は隣接テキストに委任)
-      - Closed Caption 無効時に言語 select を `disabled` + `aria-disabled` 連動
-      - `.indicator.off` の背景色を `#666` → `#888` にしてコントラスト比 3:1 を確保 (WCAG 1.4.11)
-      - `html lang` を `applyI18n()` で言語切替時に更新
-      - ログエラー判定を英語固定 → `/error|failed|エラー|失敗/i` で日本語対応
-      - sticky Save/Reload バーが設定フィールドを覆う問題を解消: `#config-form { padding-bottom: 72px }` でスクロール余裕を確保し、`.actions` 背景を `rgba(26,26,46,0.92) + backdrop-filter: blur(8px)` に変更 (WCAG 2.4.11 Focus Not Obscured)
-    - 攻撃面に影響なし。WCAG 違反の是正として S4 扱い
+38. **Web UI accessibility improvements (S4)**
+    - Put the following in place toward WCAG 2.1 AA conformance:
+      - Touch targets of 32px or more (WCAG 2.5.8)
+      - Document structure made explicit with `<main>` / ARIA landmarks (h1 is omitted because it duplicates the window title `<title>`)
+      - Changed the collapse toggles to a nested `<h2>/<h3><button>` structure to remove duplicated semantics
+      - `role="alert" aria-live="assertive"` on `.toast`, `role="img" aria-label` on `<canvas>`
+      - `aria-controls` on `#config-toggle` / `#audio-monitor-toggle` / `#log-toggle`
+      - Range sliders sync `aria-valuetext` on `oninput`, and the corresponding value spans have `aria-hidden="true"`
+      - `aria-hidden="true"` on every `.indicator` (color-only information is delegated to the adjacent text)
+      - The language select is `disabled` + `aria-disabled` together when Closed Caption is off
+      - Changed the background color of `.indicator.off` from `#666` → `#888` to secure a 3:1 contrast ratio (WCAG 1.4.11)
+      - `html lang` is updated by `applyI18n()` when the language is switched
+      - Log error detection changed from English only → `/error|failed|エラー|失敗/i` to support Japanese
+      - Fixed the sticky Save/Reload bar covering setting fields: `#config-form { padding-bottom: 72px }` secures scroll room, and the `.actions` background is changed to `rgba(26,26,46,0.92) + backdrop-filter: blur(8px)` (WCAG 2.4.11 Focus Not Obscured)
+    - No effect on the attack surface. Treated as S4 as a fix of WCAG violations
 
-### 残存リスク (受容)
+### Residual risks (accepted)
 
-| リスク | 深刻度 | 理由 |
+| Risk | Severity | Reason |
 |--------|--------|------|
-| localhost CSRF | LOW | ブラウザからの悪意あるリクエストでローカル設定が変更される可能性。設定変更は即時反映されるが、localhost バインドかつ CORS が `127.0.0.1` / `localhost` origin のみを許可するため、サードパーティ page からのクロスオリジン変更は阻止される |
-| SSE ストリーム認証なし | LOW | localhost バインドのため外部アクセス不可。同一マシン上の他プロセスからは読み取り可能だが、秘密情報は含まない |
-| OBS パスワード平文保存 | LOW | config.local.toml にパスワードが平文保存される。ローカルファイルアクセス権限に依存 |
-| `process.exit()` による即座終了 | LOW | in-flight の Whisper リクエストがキャンセルされない。データ損失はないが、不要なネットワークリクエストが残る可能性 |
-| whisper.binary による任意バイナリ実行 | LOW | config.toml/GUI で指定されたパスのバイナリを spawn() で実行する。localhost バインドのため外部からの設定変更は不可 |
-| Homebrew バイナリの信頼性 | LOW | `/opt/homebrew/bin/brew` の正当性は OS のファイル権限に依存。ローカル管理者権限がなければ改竄不可 |
-| ダウンロード URL のハードコード | LOW | GitHub/HuggingFace の固定 URL にのみアクセス。ユーザー入力による URL 変更不可 |
-| SSE クライアント切断後のバックグラウンドダウンロード継続 | LOW | UI 切断後もダウンロードは完了まで続行。config への自動保存は正常に動作するため実害なし |
+| localhost CSRF | LOW | Local settings could be changed by a malicious request from a browser. Setting changes take effect immediately, but with the localhost bind and CORS allowing only `127.0.0.1` / `localhost` origins, cross-origin changes from third-party pages are blocked |
+| No authentication on the SSE stream | LOW | Not reachable externally because of the localhost bind. Other processes on the same machine can read it, but it contains no secrets |
+| OBS password stored in plain text | LOW | The password is stored in plain text in config.local.toml. Depends on local file access permissions |
+| Immediate termination by `process.exit()` | LOW | In-flight Whisper requests are not cancelled. No data loss, but unnecessary network requests may remain |
+| Arbitrary binary execution through whisper.binary | LOW | Runs the binary at the path specified in config.toml/GUI with spawn(). Settings cannot be changed from outside because of the localhost bind |
+| Trustworthiness of the Homebrew binary | LOW | The legitimacy of `/opt/homebrew/bin/brew` depends on OS file permissions. It cannot be tampered with without local administrator rights |
+| Hard-coded download URLs | LOW | Only fixed GitHub/HuggingFace URLs are accessed. URLs cannot be changed by user input |
+| Background downloads continue after the SSE client disconnects | LOW | Downloads continue to completion after the UI disconnects. Automatic saving to config works normally, so there is no actual harm |
 
-## Electron セキュリティ設定
+## Electron security settings
 
-| 設定 | 値 | 推奨 |
+| Setting | Value | Recommendation |
 |------|----|----|
 | `nodeIntegration` | `false` | OK |
 | `contextIsolation` | `true` | OK |
-| `webPreferences.sandbox` | デフォルト (`true` in Electron 20+) | OK |
-| メニューバー | `autoHideMenuBar: true` | OK |
-| 外部 URL ナビゲーション | 制限なし (localhost のみロード) | OK |
+| `webPreferences.sandbox` | Default (`true` in Electron 20+) | OK |
+| Menu bar | `autoHideMenuBar: true` | OK |
+| External URL navigation | Not restricted (only localhost is loaded) | OK |
 
-## ダウンロード機能のセキュリティ
+## Download feature security
 
-| 項目 | 対策 |
+| Item | Measure |
 |------|------|
-| ダウンロード元 URL | ハードコードされた GitHub Releases / HuggingFace URL のみ |
-| リダイレクト | 上限 10 回。無限リダイレクトループ防止 |
-| ディスク書き込み先 | `%APPDATA%/jimaku-translator/whisper/` (Win) / `~/Library/Application Support/jimaku-translator/whisper/` (macOS) 配下のみ |
-| 中断 | AbortController で即座にキャンセル可能 |
-| 不完全ファイル | Content-Length 検証、サイズ検証 (90%)、エラー時自動削除 |
-| チェックサム | SHA-256 ハッシュをサイドカーに保存。サイドカー不在 = 未完了 |
-| 重複ダウンロード | `downloadingResources` Set で同一リソースの並行ダウンロードを拒否 (409) |
-| キャンセル | AbortController で即座にキャンセル可能。Cancel UI ボタン付き |
-| 並行ダウンロード | 各ダウンロードに固有 ID。Map で管理 |
+| Download source URLs | Only hard-coded GitHub Releases / HuggingFace URLs |
+| Redirects | Limit of 10. Prevents infinite redirect loops |
+| Disk write destination | Only under `%APPDATA%/jimaku-translator/whisper/` (Win) / `~/Library/Application Support/jimaku-translator/whisper/` (macOS) |
+| Interruption | Can be cancelled immediately with AbortController |
+| Incomplete files | Content-Length check, size check (90%), automatic deletion on error |
+| Checksums | SHA-256 hash saved in a sidecar. Missing sidecar = incomplete |
+| Duplicate downloads | The `downloadingResources` Set rejects parallel downloads of the same resource (409) |
+| Cancellation | Can be cancelled immediately with AbortController. Has a Cancel UI button |
+| Parallel downloads | Each download has its own ID. Managed in a Map |
 
-## ビルドフックのセキュリティ
+## Build hook security
 
-| 項目 | 対策 |
+| Item | Measure |
 |------|------|
-| afterPack (macOS) | `execFileSync` + 引数配列で PlistBuddy 呼び出し。シェル解釈なし |
-| afterPack (Win32) | `rcedit` ライブラリ API。コマンド実行なし |
-| asar integrity | SHA-256 ハッシュ + 4MB ブロック配列を afterPack で再計算。electron-builder のタイミングバグを回避 |
-| コード署名 (macOS) | Developer ID Application 証明書で `.app` / `.dmg` 両方に署名。hardened runtime 有効、entitlements は最小権限 (network client/server のみ) |
-| 公証 (macOS) | electron-builder `notarize: true` で `.app` を自動公証・staple。DMG は `build/notarize-dmg.cjs` で sign → notarytool submit --wait → stapler → spctl 検証。Apple 認証情報は `.env` から `node --env-file-if-exists` 経由で注入 (.gitignore 済み) |
+| afterPack (macOS) | Calls PlistBuddy with `execFileSync` + an argument array. No shell interpretation |
+| afterPack (Win32) | `rcedit` library API. No command execution |
+| asar integrity | Recomputes the SHA-256 hash + 4MB block array in afterPack. Works around the electron-builder timing bug |
+| Code signing (macOS) | Signs both the `.app` / `.dmg` with a Developer ID Application certificate. Hardened runtime enabled, entitlements are least privilege (network client/server only) |
+| Notarization (macOS) | electron-builder `notarize: true` notarizes and staples the `.app` automatically. The DMG goes through sign → notarytool submit --wait → stapler → spctl verification in `build/notarize-dmg.cjs`. Apple credentials are injected from `.env` through `node --env-file-if-exists` (in .gitignore) |
 
-## 自動更新 (electron-updater) のセキュリティ
+## Auto-update (electron-updater) security
 
-| 項目 | 対策 |
+| Item | Measure |
 |------|------|
-| 配信元 | `publish.provider: github` で `semnil/jimaku-translator` の Releases のみを参照。任意 URL 指定は不可 |
-| 改竄検証 | `latest.yml` / `latest-mac.yml` に SHA-512 ハッシュとファイルサイズを記録。electron-updater がダウンロード後に検証 |
-| 差分更新 | `.blockmap` によるブロック単位の差分取得。同じ SHA-512 検証が差分適用後の最終成果物に対して実施される |
-| macOS | 署名済み `.app` のみインストール・更新可能。Gatekeeper + notarization により改竄された更新を拒否。unsigned ビルドでは自動更新経路が無効 |
-| Windows | NSIS 署名が未設定のため auto-update 自体は動作するが、SmartScreen 警告が残る |
-| ドラフトリリース | electron-updater はドラフトを検出しない。手動 publish まで配信されないため、誤って作成されたドラフトが自動配信されるリスクなし |
-| dev 環境 | `app.isPackaged` チェックで更新処理をスキップ。開発中に意図しない更新が走らない |
+| Distribution source | `publish.provider: github` refers only to the Releases of `semnil/jimaku-translator`. Arbitrary URLs cannot be specified |
+| Tamper detection | `latest.yml` / `latest-mac.yml` record the SHA-512 hash and file size. electron-updater verifies them after downloading |
+| Differential updates | Block-level differential download with `.blockmap`. The same SHA-512 verification is run on the final artifact after the difference is applied |
+| macOS | Only signed `.app` can be installed and updated. Gatekeeper + notarization reject tampered updates. The auto-update path is disabled for unsigned builds |
+| Windows | NSIS signing is not set up, so auto-update itself works, but SmartScreen warnings remain |
+| Draft releases | electron-updater does not detect drafts. Nothing is delivered until it is published manually, so there is no risk of an accidentally created draft being delivered automatically |
+| dev environment | The `app.isPackaged` check skips update processing. No unintended updates run during development |
 
-## CI/CD (GitHub Actions) のセキュリティ
+## CI/CD (GitHub Actions) security
 
-「ワークフロートリガ」「`permissions`」「外部 action のピン留め」の 3 行は 2026-09-30 に、各ワークフローの実物と main のルールセット・Actions の許可ポリシーの現在値で確認した。このうち `tag-release.yaml` と `release.yaml` の `check-event` に関する記述、および「版上げからのタグ作成」の行は 2026-10-20 に各ワークフローの実物で確認した。「Dependabot の自動マージ」の行と、他の行のうち `dependabot-auto-merge.yml` と必須チェックの `Test 🧪`・`auto-merge` に関する記述は 2026-10-20 に追加した。他の行は 2026-04-17 の監査の記述で、この確認の対象外。
+The 3 rows "Workflow triggers", "`permissions`" and "Pinning external actions" were checked on 2026-09-30 against the actual workflows and the current values of main's ruleset and the Actions allow policy. Of these, the descriptions of `tag-release.yaml` and of `check-event` in `release.yaml`, and the "Tag creation from version bumps" row, were checked on 2026-10-20 against the actual workflows. The "Dependabot auto-merge" row, and in the other rows the descriptions of `dependabot-auto-merge.yml` and of the required checks `Test 🧪` and `auto-merge`, were added on 2026-10-20. The other rows are descriptions from the 2026-04-17 audit and outside this check.
 
-| 項目 | 対策 |
+| Item | Measure |
 |------|------|
-| ワークフロートリガ | `ci.yaml`: main への push、main 向けの PR、手動 (`workflow_dispatch`)。`tag-release.yaml`: `ci.yaml` の完了 (`workflow_run`、main のみ)。`release.yaml`: `v[0-9]+.[0-9]+.[0-9]+` / `v[0-9]+.[0-9]+.[0-9]+-*` のタグ push と手動。`check-event` ジョブがタグ ref のとき (タグ push と、`tag-release.yaml` によるタグ上の `workflow_dispatch`) だけ `build/release-tag.cjs` で正規タグ形式 (`vx.y.z` と `vx.y.z-(beta\|rc\|alpha)…`) を検証して `validTag` を出し、`create-release` は `validTag == 'true'` のときだけ走る (ブランチ上の手動起動と形式外のタグではビルドまでで、リリースは作らない。判定スクリプトが走らなかったときは `check-event` が失敗する)。`workflow-checks.yml`: PR ごと (`pull_request_target`、既定ブランチの定義で実行)。`workflow-checks-test.yml`: 検査ファイル・テストを変更する PR、同じファイルを変更する main / master への push、手動。`dependabot-auto-merge.yml`: PR ごと (`pull_request`、フィルタなし) |
-| `permissions` | ワークフロー単位で指定し、ジョブ単位の上書きは `dependabot-auto-merge.yml` の `auto-merge` ジョブ (`contents: write` と `pull-requests: write`、自動マージの予約と解除) だけ。`ci.yaml` / `workflow-checks.yml` / `workflow-checks-test.yml` / `dependabot-auto-merge.yml` (ワークフロー単位) は `contents: read`、`release.yaml` は `contents: write` (ドラフトリリース作成用)、`tag-release.yaml` は `contents: write` (タグの push) と `actions: write` (`release.yaml` の dispatch)。他の権限は付与しない |
-| 署名証明書の取り扱い | `MACOS_SIGNING_CERT` は base64 エンコード済み `.p12` を GitHub Secrets に保存。ランナー上で `$RUNNER_TEMP/cert.p12` に復元後、import 完了で即削除 |
-| キーチェーン分離 | 証明書は `$RUNNER_TEMP/app-signing.keychain-db` 専用キーチェーンにインポート。パスワードは `openssl rand -hex 32` で生成。`set-keychain-settings -lut 21600` でロック時間を制限。ランナー終了時に破棄 |
-| `security set-key-partition-list` | `apple-tool:,apple:` のみを許可。他ツールからのアクセスを遮断 |
-| 未設定時のフォールバック | `MACOS_SIGNING_CERT` 未設定時は `Check Signing Secrets` ステップが `signed=false` を出力し、署名関連ステップが skip。`npm run dist:mac:unsigned` で署名・公証なしの DMG を生成しビルドを継続 |
-| Apple 公証認証情報 | `MACOS_NOTARIZATION_USERNAME` / `MACOS_NOTARIZATION_PASSWORD` / `MACOS_NOTARIZATION_TEAM_ID` を環境変数経由で `dist:mac` に注入。`.env` ファイルは使用せずランナー環境変数のみ |
-| 外部 action のピン留め | `ci.yaml` / `release.yaml` / `tag-release.yaml` / `workflow-checks-test.yml` / `dependabot-auto-merge.yml` の `uses:` をコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) で固定。タグ参照ではないため、タグ付け替え攻撃を防止。`workflow-checks.yml` (main の必須チェック `action-pins`。ベースブランチへの追随を要求し、バイパスなし) が PR ごとにこの形式を検査する (`pull_request_target` で既定ブランチの定義を使い、PR のワークフロー・action ファイルは API でデータとして取得して yq で読むだけ。PR のコードは checkout も実行もしない)。同一リポジトリの Action はステップでは `$/` で参照させ (ステップの `./` は runner の作業領域に対して解決されるため拒否)、ローカル参照のパスの別表記と参照先までの経路上のシンボリックリンク・サブモジュールを拒否し、検査ファイル自身が既定ブランチと一致しない PR を失敗させる。検査の回帰テストは `.github/tests/workflow-checks-test.sh` (`workflow-checks-test.yml` が実行)。`pull_request_target` は `workflow-checks.yml` を対象とした Actions の許可ポリシーで許可している |
-| リリース公開方式 | `draft: true` で常にドラフトとして作成し、手動確認後に公開。誤 push による意図しない公開リリースを防止 |
-| 版上げからのタグ作成 (`tag-release.yaml`、2026-10-20 追加) | `workflow_run` で CI の完了後に走り、main への `push` で成功した run だけを処理する。checkout するのは CI が検査した `head_sha`。タグにする版は `build/release-tag.cjs` が `package.json` の `version` を第 1 親と比べて決め、形式外の版はタグを push する前に失敗させる。リモートの既存タグは動かさず、別の commit を指す同名タグがあれば失敗させる |
-| Dependabot の自動マージ (`dependabot-auto-merge.yml`、2026-10-20 追加) | PR ごとに `pull_request` で走り、PR の作成者が `dependabot[bot]` のときだけ `dependabot/fetch-metadata` と `gh` のステップを実行する (他の PR ではステップを skip し、ジョブは成功を報告する)。PR のコードは checkout も実行もせず、PR 由来の値 (URL・head SHA・更新種別) は環境変数で渡す。更新種別が semver の patch のときだけ、読んだ head SHA を条件 (`--match-head-commit`) に自動マージ (merge commit) を予約し、それ以外の種別では予約を解除し、予約の有無を読めないときはジョブを失敗させる。ジョブ `auto-merge` は main の必須チェック (他に `action-pins` と `Test 🧪`) で、その head についての判定が出る前にはマージされない。使うトークンは `GITHUB_TOKEN` (secret は使わない)。自動マージによるマージは `GITHUB_TOKEN` によるもので、main への push はワークフローを起動しない (`ci.yaml` と、その完了から起動する `tag-release.yaml` も走らない) |
+| Workflow triggers | `ci.yaml`: push to main, PRs targeting main, manual (`workflow_dispatch`). `tag-release.yaml`: completion of `ci.yaml` (`workflow_run`, main only). `release.yaml`: pushes of `v[0-9]+.[0-9]+.[0-9]+` / `v[0-9]+.[0-9]+.[0-9]+-*` tags and manual. Only when the ref is a tag (a tag push, and a `workflow_dispatch` on a tag by `tag-release.yaml`), the `check-event` job validates the canonical tag shape (`vx.y.z` and `vx.y.z-(beta\|rc\|alpha)…`) with `build/release-tag.cjs` and outputs `validTag`, and `create-release` runs only when `validTag == 'true'` (a manual run on a branch and a malformed tag only go as far as the build and create no release; when the check script did not run, `check-event` fails). `workflow-checks.yml`: every PR (`pull_request_target`, run with the default branch's definition). `workflow-checks-test.yml`: PRs that change the check file or its tests, pushes to main / master that change the same files, manual. `dependabot-auto-merge.yml`: every PR (`pull_request`, no filter) |
+| `permissions` | Specified per workflow; the only job-level override is the `auto-merge` job in `dependabot-auto-merge.yml` (`contents: write` and `pull-requests: write`, for scheduling and cancelling auto-merge). `ci.yaml` / `workflow-checks.yml` / `workflow-checks-test.yml` / `dependabot-auto-merge.yml` (workflow level) have `contents: read`, `release.yaml` has `contents: write` (for creating the draft release), and `tag-release.yaml` has `contents: write` (pushing the tag) and `actions: write` (dispatching `release.yaml`). No other permissions are granted |
+| Handling the signing certificate | `MACOS_SIGNING_CERT` stores the base64-encoded `.p12` in GitHub Secrets. It is restored to `$RUNNER_TEMP/cert.p12` on the runner and deleted immediately after the import completes |
+| Keychain isolation | The certificate is imported into the dedicated keychain `$RUNNER_TEMP/app-signing.keychain-db`. The password is generated with `openssl rand -hex 32`. `set-keychain-settings -lut 21600` limits the lock time. Discarded when the runner finishes |
+| `security set-key-partition-list` | Allows only `apple-tool:,apple:`. Blocks access from other tools |
+| Fallback when not configured | When `MACOS_SIGNING_CERT` is not set, the `Check Signing Secrets` step outputs `signed=false` and the signing-related steps are skipped. `npm run dist:mac:unsigned` produces a DMG without signing or notarization and the build continues |
+| Apple notarization credentials | `MACOS_NOTARIZATION_USERNAME` / `MACOS_NOTARIZATION_PASSWORD` / `MACOS_NOTARIZATION_TEAM_ID` are injected into `dist:mac` through environment variables. No `.env` file is used; only runner environment variables |
+| Pinning external actions | The `uses:` in `ci.yaml` / `release.yaml` / `tag-release.yaml` / `workflow-checks-test.yml` / `dependabot-auto-merge.yml` are pinned with a commit SHA + version comment (`@<sha> # vX.Y.Z`). They are not tag references, which prevents tag-moving attacks. `workflow-checks.yml` (main's required check `action-pins`; requires branches to be up to date with the base branch, no bypass) checks this form on every PR (it uses the default branch's definition through `pull_request_target`, and only fetches the PR's workflow and action files as data through the API and reads them with yq; the PR's code is neither checked out nor executed). Actions in the same repository must be referenced with `$/` in steps (a step's `./` is rejected because it resolves against the runner's workspace), alternative spellings of local reference paths and symbolic links / submodules on the path to the target are rejected, and PRs in which the check file itself does not match the default branch fail. The check's regression test is `.github/tests/workflow-checks-test.sh` (run by `workflow-checks-test.yml`). `pull_request_target` is allowed by an Actions allow policy that targets `workflow-checks.yml` |
+| Release publication method | Always created as a draft with `draft: true` and published after manual review. Prevents unintended public releases from a mistaken push |
+| Tag creation from version bumps (`tag-release.yaml`, added 2026-10-20) | Runs after CI completes through `workflow_run` and handles only runs that succeeded on a `push` to main. What it checks out is the `head_sha` that CI checked. The version to tag is decided by `build/release-tag.cjs`, which compares `version` in `package.json` with the first parent, and a malformed version fails before the tag is pushed. Existing remote tags are not moved, and it fails if a tag with the same name points to a different commit |
+| Dependabot auto-merge (`dependabot-auto-merge.yml`, added 2026-10-20) | Runs on every PR with `pull_request`, and runs the `dependabot/fetch-metadata` and `gh` steps only when the PR's author is `dependabot[bot]` (on other PRs the steps are skipped and the job reports success). The PR's code is neither checked out nor executed, and values from the PR (URL, head SHA, update type) are passed through environment variables. Only when the update type is a semver patch does it schedule auto-merge (merge commit) conditioned on the head SHA it read (`--match-head-commit`); for other types it cancels the scheduling, and when it cannot read whether auto-merge is scheduled, the job fails. The job `auto-merge` is a required check on main (along with `action-pins` and `Test 🧪`), so nothing is merged before a judgment for its head comes out. The token used is `GITHUB_TOKEN` (no secrets are used). Merges by auto-merge are made with `GITHUB_TOKEN`, so the push to main does not trigger workflows (neither `ci.yaml` nor `tag-release.yaml`, which starts from its completion, runs) |
 
-## 推奨事項
+## Recommendations
 
-1. CSP ヘッダーを HTML レスポンスに追加して inline script を制限する（現在は単一 HTML のため実質的な影響なし）
-2. Windows コード署名 (EV 証明書) を導入する。現在 `signAndEditExecutable: false` で未署名
+1. Add a CSP header to HTML responses to restrict inline scripts (no practical effect at present, since it is a single HTML file)
+2. Introduce Windows code signing (an EV certificate). Currently unsigned with `signAndEditExecutable: false`
