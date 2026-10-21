@@ -82,8 +82,6 @@ tests/                  vitest unit tests
 e2e/                    Playwright E2E tests
 models/
   silero_vad.onnx       Silero VAD model
-docs/
-  security-audit.md     security audit report
 config.toml             default settings
 ```
 
@@ -93,7 +91,7 @@ config.toml             default settings
 - Unit tests go in `tests/` as `*.test.ts`; E2E tests go in `e2e/`
 - Do not swallow errors; catch them at safe points in the pipeline and log them
 - OBS WebSocket calls must be guarded by `isConnected()`
-- **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and the documents for people are English at `<name>.md` with a Japanese translation at `<name>.ja.md` next to it (`README{,.ja}.md`). `docs/security-audit.md` is English only and has no Japanese translation
+- **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and the documents for people are English at `<name>.md` with a Japanese translation at `<name>.ja.md` next to it (`README{,.ja}.md`).
 
 ## Key design decisions
 
