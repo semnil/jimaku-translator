@@ -17,7 +17,24 @@ import {
 
 export const GUI_PORT = 9880;
 
+/** Origins of pages served from the loopback interface, on any port. */
+const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/;
 
+/** The Host header must name this server by its loopback address and listening port. */
+function isAllowedHost(req: http.IncomingMessage): boolean {
+  const port = req.socket.localPort;
+  const host = req.headers.host;
+  return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+}
+
+/** A request body must be declared as JSON; a request without a body passes. */
+function hasNonJsonBody(req: http.IncomingMessage): boolean {
+  const hasBody = req.headers['transfer-encoding'] !== undefined
+    || Number(req.headers['content-length'] ?? 0) > 0;
+  if (!hasBody) return false;
+  const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+  return type !== 'application/json';
+}
 
 export interface ServerOptions {
   pipeline: Pipeline;
@@ -36,10 +53,16 @@ export function createServer(opts: ServerOptions): http.Server {
   });
 
   const server = http.createServer(async (req, res) => {
+    if (!isAllowedHost(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden host' }));
+      return;
+    }
+
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
     const origin = req.headers.origin ?? '';
-    if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+    if (LOOPBACK_ORIGIN.test(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -47,6 +70,19 @@ export function createServer(opts: ServerOptions): http.Server {
     if (req.method === 'OPTIONS') {
       res.writeHead(204).end();
       return;
+    }
+
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.headers.origin !== undefined && !LOOPBACK_ORIGIN.test(origin)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden origin' }));
+        return;
+      }
+      if (hasNonJsonBody(req)) {
+        res.writeHead(415, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Content-Type must be application/json' }));
+        return;
+      }
     }
 
     try {
