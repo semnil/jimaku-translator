@@ -82,8 +82,6 @@ tests/                  vitest unit tests
 e2e/                    Playwright E2E tests
 models/
   silero_vad.onnx       Silero VAD model
-docs/
-  security-audit.md     security audit report
 config.toml             default settings
 ```
 
@@ -93,7 +91,7 @@ config.toml             default settings
 - Unit tests go in `tests/` as `*.test.ts`; E2E tests go in `e2e/`
 - Do not swallow errors; catch them at safe points in the pipeline and log them
 - OBS WebSocket calls must be guarded by `isConnected()`
-- **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and the documents for people are English at `<name>.md` with a Japanese translation at `<name>.ja.md` next to it (`README{,.ja}.md`). `docs/security-audit.md` is English only and has no Japanese translation
+- **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and the documents for people are English at `<name>.md` with a Japanese translation at `<name>.ja.md` next to it (`README{,.ja}.md`).
 
 ## Key design decisions
 
@@ -102,7 +100,7 @@ config.toml             default settings
 - **whisper.cpp is a separate process**: separated through the HTTP API. When `binary` is set, the app starts/stops it automatically as a child process. When it is empty, it is managed manually
 - **Inference queue limit of 3**: when Whisper is slow, old segments are discarded
 - **Automatic OBS reconnection**: at 5-second intervals. It also retries automatically when the first connection fails (supports starting OBS later). Subtitle updates while disconnected are skipped safely
-- **The GUI is localhost HTTP + SSE**: a `node:http` server (port 9880) provides the REST API + SSE. Electron loads localhost in a `BrowserWindow`. The GUI is also reachable from a browser in CLI mode
+- **The GUI is localhost HTTP + SSE**: a `node:http` server (port 9880) provides the REST API + SSE. Electron loads localhost in a `BrowserWindow`. The GUI is also reachable from a browser in CLI mode. [src/server.ts](src/server.ts) answers 403 to a request whose `Host` is not `127.0.0.1:<port>` / `localhost:<port>` and to a non-GET request whose `Origin` is present and not a loopback origin, and 415 to a request body not declared as `application/json` (a POST without a body, such as `/api/obs/reconnect`, needs no `Content-Type`)
 - **E2E tests test the HTTP server directly**: Playwright's Electron integration has Chromium version constraints, so the HTTP server is started as `webServer` and tested with an ordinary browser
 - **The macOS Whisper binary is managed by Homebrew**: whisper.cpp's GitHub Releases have no macOS build, so it is installed with `brew install whisper-cpp`. `getInstalledBinary('homebrew')` detects `/opt/homebrew/bin` or `/usr/local/bin`. The GUI's "Download" button runs `brew install`
 - **Settings changes take effect immediately**: when settings are saved from the GUI, every section (OBS, VBAN, Subtitle, VAD, Audio) is updated in memory immediately. A VBAN port change rebinds the UDP socket automatically. Only changes to the Whisper binary/model need a restart
