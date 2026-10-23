@@ -40,7 +40,7 @@
     "electron-builder": "^26.15.3",
     "rcedit": "^4.0.1",
     "tsx": "^4.23.15",
-    "typescript": "^5.7.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "build": {
