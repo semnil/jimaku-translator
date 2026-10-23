@@ -6,7 +6,7 @@ const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'release
 
 /** Splits the workflow into its top-level block and one text block per job. */
 function readWorkflow(): { top: string[]; jobs: Map<string, string[]> } {
-  const lines = fs.readFileSync(workflowPath, 'utf-8').split('\n');
+  const lines = fs.readFileSync(workflowPath, 'utf-8').split(/\r?\n/);
   const jobsAt = lines.indexOf('jobs:');
   const top = lines.slice(0, jobsAt);
   const jobs = new Map<string, string[]>();
