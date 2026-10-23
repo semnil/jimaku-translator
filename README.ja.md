@@ -201,7 +201,7 @@ App 用パスワードは https://appleid.apple.com/ で発行する。electron-
 
 リリースは版上げ PR (`package.json` と `package-lock.json` の版だけを変える PR) のマージで始まる。main への push で走った CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) が成功すると、[.github/workflows/tag-release.yaml](.github/workflows/tag-release.yaml) がマージコミットに `vX.Y.Z` タグを打ち、そのタグ上で [.github/workflows/release.yaml](.github/workflows/release.yaml) を起動する。`release.yaml` は Windows + macOS ビルドを実行してドラフトリリースを作成する。版が変わらない push ではタグを打たず、同名のタグが既にあるときはタグを動かさない。`v*.*.*` 形式のタグを手で push しても `release.yaml` は起動する。リリースノートは GitHub 自動生成 (`generate_release_notes: true`) で、前回のタグからの PR/コミットが列挙される。
 
-更新が semver の patch である Dependabot の PR は、main の必須チェック (`action-pins`・`Test 🧪`・`auto-merge`) が通ると自動でマージされる ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml))。それ以外の更新は人がマージする。自動マージによるマージは main への push でワークフローを起動しない。
+更新が semver の patch または minor である Dependabot の PR は、main の必須チェック (`action-pins`・`Test 🧪`・`auto-merge`) が通ると自動でマージされる ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml))。それ以外の更新は人がマージする。自動マージによるマージは main への push でワークフローを起動しない。
 
 macOS 署名・公証には以下の GitHub Secrets が必要 (未設定でもビルドは継続し、署名・公証なしの DMG が生成される):
 
