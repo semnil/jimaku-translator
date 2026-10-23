@@ -80,6 +80,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies 📦
+        timeout-minutes: 10
         run: npm ci
 
       - name: Run Tests ✅
@@ -118,6 +119,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies 📦
+        timeout-minutes: 10
         run: npm ci
 
       - name: Run Tests ✅
