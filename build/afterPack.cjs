@@ -85,7 +85,9 @@ function rewriteMachoUuid(binPath) {
 
 module.exports = async function (context) {
   if (context.electronPlatformName === 'win32') {
-    const rcedit = require('rcedit');
+    // rcedit 5 is ESM-only and exports `rcedit` as a named export; load it with
+    // dynamic import() from this CJS hook (require() cannot load an ESM module)
+    const { rcedit } = await import('rcedit');
     const exePath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`);
     const icoPath = path.resolve(__dirname, 'icon.ico');
     const pkg = require('../package.json');
