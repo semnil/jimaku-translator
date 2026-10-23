@@ -64,6 +64,7 @@ jobs:
     name: Build for Windows 🪟
     needs: check-event
     runs-on: windows-2022
+    timeout-minutes: 15
     defaults:
       run:
         shell: pwsh
@@ -101,6 +102,7 @@ jobs:
     name: Build for macOS 🍏
     needs: check-event
     runs-on: macos-15
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -201,6 +203,7 @@ jobs:
     needs: [check-event, build-windows, build-macos]
     if: needs.check-event.outputs.validTag == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write # create the draft Release
     defaults:
