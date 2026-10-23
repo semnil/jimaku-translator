@@ -39,7 +39,7 @@
     "electron": "^41.10.6",
     "electron-builder": "^26.15.3",
     "rcedit": "^4.0.1",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.0",
     "vitest": "^4.1.11"
   },
