@@ -13,7 +13,7 @@ A real-time subtitle system for OBS. It receives OBS audio over VBAN, runs Japan
 
 ### Subtitle PC (macOS / Windows)
 
-- jimaku-translator (installed from the installer)
+- jimaku-translator (installed from the installer); on macOS, macOS 13 (Ventura) or later
 - It can be a different machine from the OBS PC, or run on the same PC at the same time
 
 ## Setup
@@ -230,6 +230,8 @@ The packaged app checks GitHub Releases for a new version on launch, downloads t
 **Publishing a release**: the workflow creates a draft release, but electron-updater does not detect drafts. Only after merging the version-bump PR → `release.yaml` finishing, and publishing the release manually on GitHub, is the update delivered to installed clients.
 
 **macOS limitation**: auto-update works only with signed builds. If an unsigned DMG is installed, Gatekeeper rejects the difference at the verification stage of auto-update, so updates must be done manually.
+
+**macOS minimum version**: this app requires macOS 13 (Ventura) or later. Hosts on macOS 12 or earlier are not offered auto-updates (blocked by the updater's `minimumSystemVersion` check), so they are not handed a build that cannot launch.
 
 ## License
 

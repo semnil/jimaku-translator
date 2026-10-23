@@ -13,7 +13,7 @@ OBS リアルタイム字幕システム。VBAN 経由で OBS の音声を受信
 
 ### 字幕 PC (macOS / Windows)
 
-- jimaku-translator (インストーラーから導入)
+- jimaku-translator (インストーラーから導入)。macOS では macOS 13 (Ventura) 以上
 - OBS PC と別マシンでも、同じ PC で同時に動かしてもよい
 
 ## セットアップ
@@ -230,6 +230,8 @@ Windows 側は現状コード署名未設定のため、追加の Secret は不�
 **リリース公開の運用**: ワークフローはドラフトリリースを作成するが、electron-updater はドラフトを検出しない。版上げ PR のマージ → `release.yaml` の完了後、GitHub 上でリリースを手動 publish することで初めてインストール済みクライアントに更新が配信される。
 
 **macOS 制約**: auto-update は署名済みビルドでのみ動作する。unsigned DMG をインストールした場合、自動更新の検証段階で Gatekeeper が差分を拒否するため手動アップデートが必要。
+
+**macOS 最低バージョン**: 本アプリは macOS 13 (Ventura) 以上が必要。macOS 12 以前の端末には自動更新が配信されない (updater の `minimumSystemVersion` 判定で拒否される) ため、起動できない更新が降ってくることはない。
 
 ## ライセンス
 
