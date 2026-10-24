@@ -24,7 +24,7 @@
     "electron-updater": "^6.8.9",
     "obs-websocket-js": "^5.0.6",
     "onnxruntime-node": "^1.30.0",
-    "smol-toml": "^1.9.0"
+    "smol-toml": "^1.9.1"
   },
   "overrides": {
     "adm-zip": "^0.6.1",
