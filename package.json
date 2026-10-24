@@ -37,7 +37,7 @@
     "@playwright/test": "^1.48.0",
     "@types/node": "^22.10.0",
     "electron": "^44.9.1",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.18.0",
     "rcedit": "^5.0.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
