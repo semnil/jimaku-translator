@@ -21,7 +21,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "obs-websocket-js": "^5.0.6",
     "onnxruntime-node": "^1.30.0",
     "smol-toml": "^1.9.0"
