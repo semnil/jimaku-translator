@@ -4,8 +4,8 @@
 # opened; a failure of the metadata step lets the job go on to the deciding step, and the runs for one pull request
 # share a concurrency group. Then runs the step that decides, against a fake gh that answers the pull request's
 # commit list, head and auto-merge state from fixtures, for each metadata outcome, update type and commit history:
-# auto-merge is enabled (pinned to the head) only for a patch or minor fetch-metadata classified whose pull request
-# is one commit at the head that dependabot[bot] wrote, GitHub (web-flow) committed and GitHub verified the
+# auto-merge is enabled (pinned to the head) only for a patch or minor fetch-metadata classified, that does not
+# include electron-builder, and whose pull request is one commit at the head that dependabot[bot] wrote, GitHub (web-flow) committed and GitHub verified the
 # signature of; every other case turns an earlier auto-merge off, except a run whose head is no longer the head of
 # the pull request, which changes nothing; and a failure to read the commits, the head or the auto-merge state fails
 # the step.
@@ -41,9 +41,10 @@ expect 'the job has no condition' "$(yq -r '.jobs.auto-merge | has("if")' "$work
 expect 'the job has two steps' "$(yq -r '.jobs.auto-merge.steps | length' "$workflow_path")" '2'
 expect 'the metadata step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[0].if' "$workflow_path")" "$author_condition"
 expect 'the deciding step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[1].if' "$workflow_path")" "$author_condition"
-# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:37).
+# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:38).
 expect 'a failed metadata step does not fail the job' "$(yq -r '.jobs.auto-merge.steps[0].continue-on-error' "$workflow_path")" 'true'
 expect 'the deciding step reads the metadata outcome' "$(yq -r '.jobs.auto-merge.steps[1].env.METADATA_OUTCOME' "$workflow_path")" "\${{ steps.metadata.outcome }}"
+expect 'the deciding step reads the dependency names' "$(yq -r '.jobs.auto-merge.steps[1].env.DEPENDENCY_NAMES' "$workflow_path")" "\${{ steps.metadata.outputs.dependency-names }}"
 expect 'the runs for one pull request share a concurrency group' "$(yq -r '.jobs.auto-merge.concurrency.group' "$workflow_path")" "dependabot-auto-merge-\${{ github.event.pull_request.number }}"
 
 yq -r '.jobs.auto-merge.steps[1].run' "$workflow_path" > "$work/step.sh"
@@ -83,8 +84,9 @@ view="pr view $url --json headRefOid,autoMergeRequest --jq [.headRefOid, (.autoM
 disable="pr merge --disable-auto $url"
 
 # decide <name> <update type> <commits fixture> <auto-merge state> <commit list fails> <exit code> <gh calls...>
-# METADATA_OUTCOME (default success), CURRENT_HEAD (default the event's head) and VIEW_FAIL (default 0) set before
-# the call give the outcome of the metadata step, the head the pull request has now, and a failing pr view.
+# METADATA_OUTCOME (default success), NAMES (default electron), CURRENT_HEAD (default the event's head) and VIEW_FAIL
+# (default 0) set before the call give the outcome of the metadata step, the dependency names fetch-metadata read,
+# the head the pull request has now, and a failing pr view.
 decide() {
   local name=$1 type=$2 commits=$3 enabled=$4 fail=$5 want_rc=$6 rc=0
   shift 6
@@ -92,7 +94,7 @@ decide() {
   STUB_LOG="$work/log" STUB_ENABLED="$enabled" STUB_COMMITS="$work/$commits.json" STUB_COMMITS_FAIL="$fail" \
     STUB_HEAD="${CURRENT_HEAD:-$head}" STUB_VIEW_FAIL="${VIEW_FAIL:-0}" \
     PATH="$work/bin:$PATH" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR_URL=$url PR_NUMBER=7 HEAD_SHA=$head \
-    METADATA_OUTCOME="${METADATA_OUTCOME:-success}" UPDATE_TYPE="$type" bash -e "$work/step.sh" > "$work/out" 2>&1 || rc=$?
+    METADATA_OUTCOME="${METADATA_OUTCOME:-success}" DEPENDENCY_NAMES="${NAMES-electron}" UPDATE_TYPE="$type" bash -e "$work/step.sh" > "$work/out" 2>&1 || rc=$?
   expect "$name: exit code" "$rc" "$want_rc"
   expect "$name: gh calls" "$(paste -sd'|' - < "$work/log")" "$(printf '%s\n' "$@" | paste -sd'|' -)"
 }
@@ -109,6 +111,9 @@ decide 'patch, a signed amend of the Dependabot commit by someone else' $patch s
 decide 'patch, the Dependabot commit is not the head' $patch single-other-sha true 0 0 "$api" "$view" "$disable"
 decide 'patch, two commits with the head listed first' $patch two-head-first true 0 0 "$api" "$view" "$disable"
 decide 'major, auto-merge on' $major single-bot true 0 0 "$view" "$disable"
+NAMES=electron-builder decide 'patch, electron-builder alone, auto-merge on' $patch single-bot true 0 0 "$view" "$disable"
+NAMES='electron, electron-builder' decide 'minor, electron-builder in a group, auto-merge off' $minor single-bot false 0 0 "$view"
+NAMES='electron-builder-squirrel-windows, app-builder-lib' decide 'patch, names that only contain electron-builder' $patch single-bot false 0 0 "$api" "$enable"
 decide 'no update type, auto-merge off' '' single-bot false 0 0 "$view"
 decide 'unknown update type, auto-merge state unreadable' other single-bot unreadable 0 1 "$view"
 decide 'patch, commit list unreadable' $patch single-bot false 1 1 "$api"

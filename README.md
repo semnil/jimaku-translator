@@ -195,13 +195,13 @@ cp .env.example .env
 npm run dist:mac
 ```
 
-The app-specific password is issued at https://appleid.apple.com/. After electron-builder notarizes the `.app`, [build/notarize-dmg.cjs](build/notarize-dmg.cjs) runs sign → notarytool submit → stapler → spctl verification on the DMG.
+The app-specific password is issued at https://appleid.apple.com/. After electron-builder notarizes the `.app`, [build/notarize-dmg.cjs](build/notarize-dmg.cjs) runs sign → notarytool submit → stapler → spctl verification on the DMG, and then [build/refresh-dmg-update-info.cjs](build/refresh-dmg-update-info.cjs) rewrites the sha512 and size of the DMG entry in `dist/latest-mac.yml` from the signed and stapled DMG.
 
 ### GitHub Actions CI/CD
 
 A release starts with merging a version-bump PR (a PR that changes only the version in `package.json` and `package-lock.json`). When CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) run by the push to main succeeds, [.github/workflows/tag-release.yaml](.github/workflows/tag-release.yaml) tags the merge commit with `vX.Y.Z` and triggers [.github/workflows/release.yaml](.github/workflows/release.yaml) on that tag. `release.yaml` runs the Windows + macOS builds and creates a draft release. A push that does not change the version creates no tag, and when a tag with the same name already exists, the tag is not moved. Pushing a `v*.*.*` tag by hand also triggers `release.yaml`. The release notes are generated automatically by GitHub (`generate_release_notes: true`) and list the PRs/commits since the previous tag.
 
-Dependabot PRs whose update is a semver patch or minor, and that are one verified commit that Dependabot wrote and GitHub committed, are merged automatically once main's required checks (`action-pins`, `Test 🧪`, `auto-merge`) pass ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml)). Other updates are merged by a person. Merges by auto-merge do not trigger workflows with the push to main.
+Dependabot PRs whose update is a semver patch or minor, and that are one verified commit that Dependabot wrote and GitHub committed, are merged automatically once main's required checks (`action-pins`, `Test 🧪`, `auto-merge`) pass ([.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml)). An update that includes electron-builder, which is pinned to a prerelease, is never merged automatically. Other updates are merged by a person. Merges by auto-merge do not trigger workflows with the push to main.
 
 macOS signing and notarization need the following GitHub Secrets (the build continues without them and produces a DMG without signing or notarization):
 
