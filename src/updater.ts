@@ -1,13 +1,16 @@
 import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
-export function initAutoUpdater(): void {
+import { createUpdateController, type UpdateController } from './update-controller.js';
+
+/** Sets up electron-updater in the packaged app; returns null when the app is not packaged. */
+export function initAutoUpdater(): UpdateController | null {
   if (!app.isPackaged) {
     console.log('[updater] skipped (not packaged)');
-    return;
+    return null;
   }
 
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => {
@@ -29,7 +32,5 @@ export function initAutoUpdater(): void {
     console.log(`[updater] downloaded ${info.version}; will install on quit`);
   });
 
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error(`[updater] check failed: ${err instanceof Error ? err.message : String(err)}`);
-  });
+  return createUpdateController(autoUpdater);
 }

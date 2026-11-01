@@ -52,6 +52,7 @@ On launch, a window opens showing the status panel, the settings form, and the l
 - **Input level meter**: shows the RMS level of the input audio in real time (dBFS). It can be compared directly with the RMS gate threshold
 - **Audio capture**: the Capture 5s WAV button downloads a 16kHz mono WAV
 - **Log**: shows the pipeline log in real time
+- **App settings**: the gear button next to the Status heading opens a dialog with the running version, **Check at launch** (saved as `[update] check_at_launch` in `config.local.toml`) and **Check now**. In CLI mode and in development mode it shows "Available in the installed app only."
 
 In CLI mode, the same GUI is available from a browser at `http://127.0.0.1:9880/`.
 
@@ -137,6 +138,9 @@ normalize_target_dbfs = -6  # Target RMS (dBFS) for normalizing speech segments.
 
 [ui]
 language = ""               # "" = detect the system language automatically; "en" or "ja" to fix it
+
+[update]
+check_at_launch = true      # check for a new version once the window has opened (packaged app only). Change it in the GUI's app settings
 ```
 
 ## Troubleshooting
@@ -225,7 +229,7 @@ Code signing is not set up on Windows at present, so no additional Secret is nee
 
 ### Auto-update
 
-The packaged app checks GitHub Releases for a new version on launch, downloads the difference, and applies it automatically when the app quits ([electron-updater](https://www.electron.build/auto-update)). In development mode (`npm run electron`), auto-update is skipped.
+When **Check at launch** is on in the app settings (the default), the packaged app checks GitHub Releases for a new version once its window has opened ([electron-updater](https://www.electron.build/auto-update)). When it finds one, it asks "Version X is available. Update now?". Accepting it downloads the update and restarts the app into the new version. Declining it downloads nothing; the app asks again at the next launch or when you use **Check now**. **Check now** in the app settings runs the same check at any time. The launch check runs once per app launch: reloading the window does not repeat it. In development mode (`npm run electron`) and in CLI mode, updates are not checked.
 
 **Publishing a release**: the workflow creates a draft release, but electron-updater does not detect drafts. Only after merging the version-bump PR → `release.yaml` finishing, and publishing the release manually on GitHub, is the update delivered to installed clients.
 

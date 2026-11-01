@@ -2,8 +2,9 @@ import dgram from 'node:dgram';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { app, BrowserWindow, screen } from 'electron';
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, screen } from 'electron';
 
+import { stopPipelineOnQuit } from './app-quit.js';
 import { Pipeline } from './pipeline.js';
 import { createServer, GUI_PORT } from './server.js';
 import { initAutoUpdater } from './updater.js';
@@ -158,6 +159,8 @@ process.env.JIMAKU_DATA_DIR = app.getPath('userData');
 process.env.VBAN_LOCAL_CONFIG_DIR = app.getPath('userData');
 migrateLegacyDataIfNeeded();
 
+const stopBeforeQuit = stopPipelineOnQuit(app, nativeAutoUpdater, () => pipeline ? pipeline.stop() : Promise.resolve());
+
 app.whenReady().then(async () => {
   primeLocalNetworkPermission();
 
@@ -169,7 +172,7 @@ app.whenReady().then(async () => {
 
   pipeline = new Pipeline(configPath);
 
-  const server = createServer({ pipeline });
+  const server = createServer({ pipeline, updater: initAutoUpdater(), version: app.getVersion(), stopPipeline: stopBeforeQuit });
   await new Promise<void>((resolve, reject) => {
     server.on('error', reject);
     server.listen(GUI_PORT, '127.0.0.1', resolve);
@@ -181,14 +184,8 @@ app.whenReady().then(async () => {
   });
 
   mainWindow = createMainWindow();
-  initAutoUpdater();
 }).catch((err) => {
   console.error('Startup failed:', err);
-  app.quit();
-});
-
-app.on('window-all-closed', async () => {
-  if (pipeline) await pipeline.stop();
   app.quit();
 });
 

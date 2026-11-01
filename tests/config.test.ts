@@ -42,6 +42,7 @@ function makeBaseConfig(): Config {
       adaptive_gate_max_db: -30,
     },
     ui: { language: '', show_vad_debug: false },
+    update: { check_at_launch: true },
   };
 }
 
@@ -152,5 +153,32 @@ describe('configToToml round-trip', () => {
     expect(toml).not.toMatch(/^\s*threads\s*=/m);
     const parsed = parseToml(toml) as { whisper: Record<string, unknown> };
     expect('threads' in parsed.whisper).toBe(false);
+  });
+});
+
+describe('update.check_at_launch', () => {
+  it('defaults to on', () => {
+    const p = writeTempConfig('[obs]\nhost = "10.0.0.1"\n');
+    expect(loadConfig(p).update.check_at_launch).toBe(true);
+    fs.unlinkSync(p);
+  });
+
+  it('reads the stored value', () => {
+    const p = writeTempConfig('[update]\ncheck_at_launch = false\n');
+    expect(loadConfig(p).update.check_at_launch).toBe(false);
+    fs.unlinkSync(p);
+  });
+
+  it('rejects a value that is not a boolean', () => {
+    const p = writeTempConfig('[update]\ncheck_at_launch = "no"\n');
+    expect(() => loadConfig(p)).toThrow('update.check_at_launch');
+    fs.unlinkSync(p);
+  });
+
+  it('round-trips through configToToml', () => {
+    const cfg = makeBaseConfig();
+    cfg.update.check_at_launch = false;
+    const parsed = parseToml(configToToml(cfg)) as { update: { check_at_launch: boolean } };
+    expect(parsed.update.check_at_launch).toBe(false);
   });
 });
