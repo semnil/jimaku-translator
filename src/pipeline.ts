@@ -670,13 +670,20 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     this.lastDispatchedSeq = 0;
     this.lastResult = null;
     this.cancelCapture(new Error('Pipeline stopped'));
-    await this.subtitle?.clear().catch(() => {});
-    await this.obs?.disconnect();
-    if (this.whisperProc) {
-      this.whisperProc.removeAllListeners();
-      await this.whisperProc.stop();
-      this.whisperProc = null;
-    }
+    // OBS and whisper-server stop side by side: whisper-server's stop does not wait for OBS to answer.
+    const whisperProc = this.whisperProc;
+    this.whisperProc = null;
+    await Promise.all([
+      (async () => {
+        await this.subtitle?.clear().catch(() => {});
+        await this.obs?.disconnect();
+      })(),
+      (async () => {
+        if (!whisperProc) return;
+        whisperProc.removeAllListeners();
+        await whisperProc.stop();
+      })(),
+    ]);
   }
 
   private async processQueue(): Promise<void> {
