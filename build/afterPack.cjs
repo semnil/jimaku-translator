@@ -1,5 +1,6 @@
 // afterPack hook:
-// - Win32: embed icon and version info into the exe via rcedit
+// - Win32: record the app for win-version-info.cjs, which embeds the icon and
+//   version info into the exe when the NSIS target starts
 // - macOS: give the main executable its own LC_UUID
 const path = require('path');
 const fs = require('fs');
@@ -81,30 +82,7 @@ function rewriteMachoUuid(binPath) {
 
 module.exports = async function (context) {
   if (context.electronPlatformName === 'win32') {
-    // rcedit 5 is ESM-only and exports `rcedit` as a named export; load it with
-    // dynamic import() from this CJS hook (require() cannot load an ESM module)
-    const { rcedit } = await import('rcedit');
-    const exePath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`);
-    const icoPath = path.resolve(__dirname, 'icon.ico');
-    const pkg = require('../package.json');
-    const version = pkg.version;
-    const productName = context.packager.appInfo.productName;
-    const companyName = pkg.author || 'semnil';
-    const copyright = `Copyright (C) ${new Date().getFullYear()} ${companyName}`;
-    console.log(`[afterPack] Setting icon and version info on ${exePath}`);
-    await rcedit(exePath, {
-      icon: icoPath,
-      'file-version': version,
-      'product-version': version,
-      'version-string': {
-        CompanyName: companyName,
-        FileDescription: productName,
-        ProductName: productName,
-        OriginalFilename: `${productName}.exe`,
-        InternalName: productName,
-        LegalCopyright: copyright,
-      },
-    });
+    require('./win-version-info.cjs').record(context);
     return;
   }
 

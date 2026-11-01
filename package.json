@@ -92,6 +92,7 @@
       }
     },
     "afterPack": "build/afterPack.cjs",
+    "artifactBuildStarted": "build/win-version-info.cjs",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
