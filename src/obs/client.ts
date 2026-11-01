@@ -1,4 +1,4 @@
-import OBSWebSocket from 'obs-websocket-js';
+import OBSWebSocket, { type OBSRequestTypes, type OBSResponseTypes } from 'obs-websocket-js';
 import { EventEmitter } from 'node:events';
 
 export interface ObsClientOptions {
@@ -89,14 +89,14 @@ export class ObsClient extends EventEmitter<{
     try {
       const calls: Promise<unknown>[] = [];
       if (this.opts.sourceJa) {
-        calls.push(this.ws.call('SetInputSettings', {
+        calls.push(this.call('SetInputSettings', {
           inputName: this.opts.sourceJa,
           inputSettings: { text: ja },
           overlay: true,
         }));
       }
       if (this.opts.sourceEn) {
-        calls.push(this.ws.call('SetInputSettings', {
+        calls.push(this.call('SetInputSettings', {
           inputName: this.opts.sourceEn,
           inputSettings: { text: en },
           overlay: true,
@@ -119,7 +119,7 @@ export class ObsClient extends EventEmitter<{
   async sendCaption(text: string): Promise<void> {
     if (!this.connected || !text) return;
     try {
-      await this.ws.call('SendStreamCaption', { captionText: text });
+      await this.call('SendStreamCaption', { captionText: text });
     } catch {
       // Silently ignore — stream may not be active
     }
@@ -130,12 +130,27 @@ export class ObsClient extends EventEmitter<{
     if (!this.connected) return [];
 
     const results = await Promise.all(
-      TEXT_INPUT_KINDS.map((kind) => this.ws.call('GetInputList', { inputKind: kind })),
+      TEXT_INPUT_KINDS.map((kind) => this.call('GetInputList', { inputKind: kind })),
     );
     const names = results.flatMap(
       ({ inputs }) => (inputs as Array<{ inputName: string }>).map((i) => i.inputName),
     );
     return names.sort();
+  }
+
+  /** Sends a request; rejects when the connection closes before OBS answers. */
+  private call<Type extends keyof OBSRequestTypes>(
+    requestType: Type,
+    requestData?: OBSRequestTypes[Type],
+  ): Promise<OBSResponseTypes[Type]> {
+    const ws = this.ws;
+    return new Promise((resolve, reject) => {
+      const onClosed = (err: Error) => reject(err);
+      ws.once('ConnectionClosed', onClosed);
+      ws.call(requestType, requestData)
+        .then(resolve, reject)
+        .finally(() => ws.off('ConnectionClosed', onClosed));
+    });
   }
 
   private setupListeners(): void {
