@@ -31,7 +31,10 @@
     "brace-expansion@>=5.0.2 <5.0.6": "^5.0.6",
     "brace-expansion@1": "^1.1.16",
     "brace-expansion@2": "^2.1.2",
-    "js-yaml@4": "^4.3.0"
+    "js-yaml@4": "^4.3.0",
+    "minimatch@10": "11.0.3",
+    "minimatch@5": "11.0.3",
+    "glob": "14.0.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
