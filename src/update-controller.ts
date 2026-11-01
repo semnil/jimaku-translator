@@ -21,13 +21,9 @@ function errorMessage(err: unknown): string {
 
 export function createUpdateController(updater: AppUpdater): UpdateController {
   let offered: string | null = null;
-  let downloaded: string | null = null;
   let restarting = false;
   const restartErrorListeners: Array<(message: string) => void> = [];
 
-  updater.on('update-downloaded', (info) => {
-    downloaded = info.version;
-  });
   const reportRestartError = (err: unknown) => {
     restarting = false;
     for (const listener of restartErrorListeners) listener(errorMessage(err));
@@ -46,8 +42,8 @@ export function createUpdateController(updater: AppUpdater): UpdateController {
       if (offered !== version) {
         throw new UpdateNotOfferedError(`Version ${version} was not offered by the last check`);
       }
-      // Joins the download already in progress, if any.
-      if (downloaded !== version) await updater.downloadUpdate();
+      // Joins the download already in progress, if any; otherwise downloads again, using the cached file when it is valid.
+      await updater.downloadUpdate();
     },
     restart() {
       restarting = true;

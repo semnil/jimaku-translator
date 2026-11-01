@@ -81,14 +81,19 @@ describe('createUpdateController download()', () => {
     expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it('skips the download when that version has already been downloaded', async () => {
+  it('downloads again on a retry after electron-updater reported that version downloaded', async () => {
     const updater = fakeUpdater();
     updater.checkForUpdates.mockResolvedValue(offering('9.9.9'));
+    updater.downloadUpdate.mockImplementationOnce(async () => {
+      updater.emit('update-downloaded', { version: '9.9.9' });
+      throw new Error('Squirrel.Mac: the update could not be staged');
+    });
     const controller = controllerFor(updater);
     await controller.check();
-    updater.emit('update-downloaded', { version: '9.9.9' });
+    await expect(controller.download('9.9.9')).rejects.toThrow('could not be staged');
+    await controller.check();
     await controller.download('9.9.9');
-    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(2);
   });
 
   it('rejects with the download error', async () => {
