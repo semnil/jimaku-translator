@@ -35,6 +35,7 @@ function stubPipeline(config: Config, configPath: string) {
   stub.getConfigPath = () => configPath;
   stub.getLogBuffer = () => [];
   stub.getObs = () => null;
+  stub.stop = vi.fn(async () => {});
   for (const name of [
     'updateObsConfig', 'updateWhisperConfig', 'updateSubtitleConfig', 'updateVadConfig',
     'updateAudioConfig', 'updateVbanConfig', 'updateUiConfig',
@@ -302,6 +303,30 @@ describe('update endpoints', () => {
       expect(res.body).toEqual({ restarting: true });
       expect(controller.download).toHaveBeenCalledWith('9.9.9');
       await vi.waitFor(() => expect(controller.restart).toHaveBeenCalledTimes(1));
+    });
+
+    it('stops the pipeline before restarting', async () => {
+      const controller = fakeController();
+      const pipeline = stubPipeline(config, path.join(tmpDir, 'config.toml'));
+      let finishStop!: () => void;
+      (pipeline.stop as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise<void>((resolve) => { finishStop = resolve; }));
+      await start({ updater: controller, pipeline });
+      expect((await send(port, 'POST', '/api/update/install', { version: '9.9.9' })).status).toBe(200);
+      await vi.waitFor(() => expect(pipeline.stop).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(controller.restart).not.toHaveBeenCalled();
+      finishStop();
+      await vi.waitFor(() => expect(controller.restart).toHaveBeenCalledTimes(1));
+    });
+
+    it('restarts even when stopping the pipeline fails', async () => {
+      const controller = fakeController();
+      const pipeline = stubPipeline(config, path.join(tmpDir, 'config.toml'));
+      (pipeline.stop as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('OBS disconnect failed'));
+      await start({ updater: controller, pipeline });
+      await send(port, 'POST', '/api/update/install', { version: '9.9.9' });
+      await vi.waitFor(() => expect(controller.restart).toHaveBeenCalledTimes(1));
+      expect(console.error).toHaveBeenCalledWith('[updater] pipeline stop before restart failed: OBS disconnect failed');
     });
 
     it('rejects a missing version', async () => {

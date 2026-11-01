@@ -140,7 +140,7 @@ export function createServer(opts: ServerOptions): http.Server {
       } else if (url.pathname === '/api/update/check' && req.method === 'POST') {
         await handleUpdateCheck(req, res, update, pipeline);
       } else if (url.pathname === '/api/update/install' && req.method === 'POST') {
-        await handleUpdateInstall(req, res, update);
+        await handleUpdateInstall(req, res, update, pipeline);
       } else if (url.pathname === '/api/events' && req.method === 'GET') {
         handleSSE(req, res, sseClients, pipeline);
       } else {
@@ -658,11 +658,12 @@ async function handleUpdateCheck(
   json(res, version === null ? { available: false } : { available: true, version });
 }
 
-/** Downloads the offered version, answers, then quits the app to install it. */
+/** Downloads the offered version, answers, stops the pipeline, then quits the app to install it. */
 async function handleUpdateInstall(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   update: UpdateState,
+  pipeline: Pipeline,
 ): Promise<void> {
   const body = await readJsonObject(req);
   if (body === null) {
@@ -692,12 +693,18 @@ async function handleUpdateInstall(
     jsonError(res, err instanceof UpdateNotOfferedError ? 409 : 500, msg);
     return;
   }
-  // The restart waits for the answer to reach the page, or for the page to go away.
+  // The restart waits for the answer to reach the page, or for the page to go away,
+  // and for the pipeline to stop (subtitles cleared, OBS disconnected, whisper-server ended).
+  const restart = () => {
+    pipeline.stop().catch((err) => {
+      console.error(`[updater] pipeline stop before restart failed: ${err instanceof Error ? err.message : String(err)}`);
+    }).then(() => updater.restart());
+  };
   if (req.socket.destroyed) {
-    updater.restart();
+    restart();
     return;
   }
-  res.on('close', () => updater.restart());
+  res.on('close', restart);
   json(res, { restarting: true });
 }
 
