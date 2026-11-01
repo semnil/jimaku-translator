@@ -1,9 +1,8 @@
 // artifactBuildStarted hook: embeds the icon and version info into the Windows
-// exe via rcedit when the NSIS target starts. electron-builder edits the exe's
-// resources after afterPack, and the NSIS target packs the app directory after
-// this event, so the values written here are the ones the installer ships.
-// afterPack calls record() with each Windows app it packed; the hook fails when
-// the NSIS target starts with nothing recorded.
+// exe via rcedit when the NSIS target starts, which is after electron-builder
+// edits the exe's resources and before NSIS packs the app directory. afterPack
+// calls record() with each Windows app it packed; the hook fails when the NSIS
+// target starts with nothing recorded.
 const path = require('path');
 
 const apps = [];
