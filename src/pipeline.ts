@@ -106,6 +106,7 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
 
   private whisper!: WhisperClient;
   private whisperProc: WhisperProcess | null = null;
+  private stopping: Promise<void> | null = null;
   private obs!: ObsClient;
   private subtitle!: SubtitleManager;
   private vad!: SileroVad;
@@ -650,7 +651,17 @@ export class Pipeline extends EventEmitter<PipelineEvents> {
     }, 300);
   }
 
-  async stop(): Promise<void> {
+  /** Stops the pipeline; a call made while a stop is running waits for that stop. */
+  stop(): Promise<void> {
+    if (!this.stopping) {
+      this.stopping = this.stopNow().finally(() => {
+        this.stopping = null;
+      });
+    }
+    return this.stopping;
+  }
+
+  private async stopNow(): Promise<void> {
     if (this.statusInterval) {
       clearInterval(this.statusInterval);
       this.statusInterval = null;

@@ -35,7 +35,7 @@ describe('Pipeline.stop', () => {
     expect(whisperProc.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('stops whisper-server once when stop() is called again while it is stopping', async () => {
+  it('makes a stop() called while one is running wait for whisper-server, and stops it once', async () => {
     let finish!: () => void;
     const { pipeline, whisperProc } = pipelineWith({
       clear: async () => {},
@@ -43,9 +43,25 @@ describe('Pipeline.stop', () => {
       whisperStop: () => new Promise<void>((resolve) => { finish = resolve; }),
     });
     const first = pipeline.stop();
-    const second = pipeline.stop();
+    await vi.waitFor(() => expect(whisperProc.stop).toHaveBeenCalledTimes(1));
+    let secondDone = false;
+    const second = pipeline.stop().then(() => { secondDone = true; });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondDone).toBe(false);
     finish();
     await Promise.all([first, second]);
+    expect(secondDone).toBe(true);
     expect(whisperProc.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a new stop once the previous one has finished', async () => {
+    const { pipeline, obs } = pipelineWith({
+      clear: async () => {},
+      disconnect: async () => {},
+      whisperStop: async () => {},
+    });
+    await pipeline.stop();
+    await pipeline.stop();
+    expect(obs.disconnect).toHaveBeenCalledTimes(2);
   });
 });
