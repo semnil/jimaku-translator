@@ -2,8 +2,9 @@ import dgram from 'node:dgram';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { app, BrowserWindow, screen } from 'electron';
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, screen } from 'electron';
 
+import { stopPipelineOnQuit } from './app-quit.js';
 import { Pipeline } from './pipeline.js';
 import { createServer, GUI_PORT } from './server.js';
 import { initAutoUpdater } from './updater.js';
@@ -186,10 +187,7 @@ app.whenReady().then(async () => {
   app.quit();
 });
 
-app.on('window-all-closed', async () => {
-  if (pipeline) await pipeline.stop();
-  app.quit();
-});
+stopPipelineOnQuit(app, nativeAutoUpdater, () => pipeline ? pipeline.stop() : Promise.resolve());
 
 app.on('activate', () => {
   if (mainWindow === null) {
