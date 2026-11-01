@@ -195,7 +195,7 @@ cp .env.example .env
 npm run dist:mac
 ```
 
-The app-specific password is issued at https://appleid.apple.com/. After electron-builder notarizes the `.app`, [build/notarize-dmg.cjs](build/notarize-dmg.cjs) runs sign → notarytool submit → stapler → spctl verification on the DMG.
+The app-specific password is issued at https://appleid.apple.com/. After electron-builder notarizes the `.app`, [build/notarize-dmg.cjs](build/notarize-dmg.cjs) runs sign → notarytool submit → stapler → spctl verification on the DMG, and then [build/refresh-dmg-update-info.cjs](build/refresh-dmg-update-info.cjs) rewrites the sha512 and size of the DMG entry in `dist/latest-mac.yml` from the signed and stapled DMG.
 
 ### GitHub Actions CI/CD
 

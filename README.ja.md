@@ -195,7 +195,7 @@ cp .env.example .env
 npm run dist:mac
 ```
 
-App 用パスワードは https://appleid.apple.com/ で発行する。electron-builder が `.app` を公証した後、[build/notarize-dmg.cjs](build/notarize-dmg.cjs) が DMG の sign → notarytool submit → stapler → spctl 検証を実施する。
+App 用パスワードは https://appleid.apple.com/ で発行する。electron-builder が `.app` を公証した後、[build/notarize-dmg.cjs](build/notarize-dmg.cjs) が DMG の sign → notarytool submit → stapler → spctl 検証を実施し、その後 [build/refresh-dmg-update-info.cjs](build/refresh-dmg-update-info.cjs) が `dist/latest-mac.yml` の DMG の項目の sha512 と size を、署名・staple 後の DMG から書き直す。
 
 ### GitHub Actions CI/CD
 
