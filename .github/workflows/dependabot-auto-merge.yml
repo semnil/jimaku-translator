@@ -6,12 +6,11 @@ name: Dependabot auto-merge
 # that commit is the head the event names, dependabot[bot] wrote it, GitHub (web-flow) committed it and
 # GitHub verified its signature: fetch-metadata classifies the first commit alone, and an amend keeps the
 # author while it makes the amending person the committer. An update that includes electron-builder never
-# enables auto-merge, whatever its update type: electron-builder is pinned to a prerelease, its prereleases change
-# the build configuration, and CI does not package the app. For any other update type, including one
-# fetch-metadata cannot read or a run in which fetch-metadata fails, for an update that includes electron-builder,
-# and for any other commit history, it turns off an auto-merge an earlier head enabled: a push leaves auto-merge
-# on, and a rebase or an added commit can change the update. A run whose head is no longer the head of the pull request changes nothing, and the runs
-# for one pull request run one at a time. On every other pull request both steps are skipped.
+# enables auto-merge, whatever its update type. For any other update type, including one fetch-metadata cannot
+# read or a run in which fetch-metadata fails, for an update that includes electron-builder, and for any other
+# commit history, it turns off an auto-merge an earlier head enabled: a push leaves auto-merge on, and a rebase
+# or an added commit can change the update. A run whose head is no longer the head of the pull request changes
+# nothing, and the runs for one pull request run one at a time. On every other pull request both steps are skipped.
 # The step fails when it cannot read the commits of the pull request, its head or whether auto-merge is on.
 # The job reports `auto-merge`, a required status check of the default branch, so a pull request does not
 # merge before the run for its head commit has decided. The Dependabot condition therefore sits on the

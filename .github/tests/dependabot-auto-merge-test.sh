@@ -41,7 +41,7 @@ expect 'the job has no condition' "$(yq -r '.jobs.auto-merge | has("if")' "$work
 expect 'the job has two steps' "$(yq -r '.jobs.auto-merge.steps | length' "$workflow_path")" '2'
 expect 'the metadata step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[0].if' "$workflow_path")" "$author_condition"
 expect 'the deciding step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[1].if' "$workflow_path")" "$author_condition"
-# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:39).
+# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:38).
 expect 'a failed metadata step does not fail the job' "$(yq -r '.jobs.auto-merge.steps[0].continue-on-error' "$workflow_path")" 'true'
 expect 'the deciding step reads the metadata outcome' "$(yq -r '.jobs.auto-merge.steps[1].env.METADATA_OUTCOME' "$workflow_path")" "\${{ steps.metadata.outcome }}"
 expect 'the deciding step reads the dependency names' "$(yq -r '.jobs.auto-merge.steps[1].env.DEPENDENCY_NAMES' "$workflow_path")" "\${{ steps.metadata.outputs.dependency-names }}"
