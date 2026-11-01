@@ -43,6 +43,8 @@ export interface ServerOptions {
   updater?: UpdateController | null;
   /** The running version; read from package.json when omitted. */
   version?: string;
+  /** Stops the pipeline before an update restart; pipeline.stop() when omitted. */
+  stopPipeline?: () => Promise<void>;
 }
 
 /** The version in the package.json next to the build output directory. */
@@ -57,6 +59,7 @@ export function createServer(opts: ServerOptions): http.Server {
   const update: UpdateState = {
     updater: opts.updater ?? null,
     version: opts.version ?? readPackageVersion(),
+    stopPipeline: opts.stopPipeline ?? (() => pipeline.stop()),
     launchCheckRun: false,
     installing: false,
   };
@@ -140,7 +143,7 @@ export function createServer(opts: ServerOptions): http.Server {
       } else if (url.pathname === '/api/update/check' && req.method === 'POST') {
         await handleUpdateCheck(req, res, update, pipeline);
       } else if (url.pathname === '/api/update/install' && req.method === 'POST') {
-        await handleUpdateInstall(req, res, update, pipeline);
+        await handleUpdateInstall(req, res, update);
       } else if (url.pathname === '/api/events' && req.method === 'GET') {
         handleSSE(req, res, sseClients, pipeline);
       } else {
@@ -555,6 +558,7 @@ async function handleDownloadCancel(
 interface UpdateState {
   updater: UpdateController | null;
   version: string;
+  stopPipeline: () => Promise<void>;
   /** The launch check runs once per process, whichever page asks first. */
   launchCheckRun: boolean;
   installing: boolean;
@@ -663,7 +667,6 @@ async function handleUpdateInstall(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   update: UpdateState,
-  pipeline: Pipeline,
 ): Promise<void> {
   const body = await readJsonObject(req);
   if (body === null) {
@@ -696,7 +699,7 @@ async function handleUpdateInstall(
   // The restart waits for the answer to reach the page, or for the page to go away,
   // and for the pipeline to stop (subtitles cleared, OBS disconnected, whisper-server ended).
   const restart = () => {
-    pipeline.stop().catch((err) => {
+    update.stopPipeline().catch((err) => {
       console.error(`[updater] pipeline stop before restart failed: ${err instanceof Error ? err.message : String(err)}`);
     }).then(() => updater.restart());
   };

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { App, AutoUpdater } from 'electron';
-import { stopPipelineOnQuit } from '../src/app-quit.js';
+import { QUIT_STOP_TIMEOUT_MS, stopPipelineOnQuit } from '../src/app-quit.js';
 
 function fakeApp() {
   const app = Object.assign(new EventEmitter(), { quit: vi.fn() });
@@ -31,8 +31,8 @@ describe('stopPipelineOnQuit', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  function install(stop: () => Promise<void>) {
-    return stopPipelineOnQuit(app as unknown as App, native as unknown as AutoUpdater, stop);
+  function install(stop: () => Promise<void>, timeoutMs?: number) {
+    return stopPipelineOnQuit(app as unknown as App, native as unknown as AutoUpdater, stop, timeoutMs);
   }
 
   it('holds a quit until the pipeline has stopped, then quits', async () => {
@@ -83,6 +83,32 @@ describe('stopPipelineOnQuit', () => {
     await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
     expect(console.error).toHaveBeenCalledWith('Pipeline stop failed: OBS disconnect failed');
     expect(beforeQuit(app)).toBe(false);
+  });
+
+  it('quits without the stop once the timeout has passed', async () => {
+    const stopPipeline = vi.fn(() => new Promise<void>(() => {}));
+    install(stopPipeline, 20);
+    expect(beforeQuit(app)).toBe(true);
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    expect(console.error).toHaveBeenCalledWith('Pipeline stop did not finish within 20 ms; quitting without it');
+    expect(beforeQuit(app)).toBe(false);
+  });
+
+  it('does not report a timeout for a stop that finished in time', async () => {
+    vi.useFakeTimers();
+    try {
+      install(vi.fn(async () => {}), 20);
+      expect(beforeQuit(app)).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(app.quit).toHaveBeenCalledTimes(1);
+      expect(console.error).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits up to 5 seconds by default', () => {
+    expect(QUIT_STOP_TIMEOUT_MS).toBe(5000);
   });
 
   it('returns the shared stop', async () => {

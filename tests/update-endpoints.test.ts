@@ -319,6 +319,17 @@ describe('update endpoints', () => {
       await vi.waitFor(() => expect(controller.restart).toHaveBeenCalledTimes(1));
     });
 
+    it('uses the stop it was given instead of pipeline.stop()', async () => {
+      const controller = fakeController();
+      const pipeline = stubPipeline(config, path.join(tmpDir, 'config.toml'));
+      const stopPipeline = vi.fn(async () => {});
+      await start({ updater: controller, pipeline, stopPipeline });
+      await send(port, 'POST', '/api/update/install', { version: '9.9.9' });
+      await vi.waitFor(() => expect(controller.restart).toHaveBeenCalledTimes(1));
+      expect(stopPipeline).toHaveBeenCalledTimes(1);
+      expect(pipeline.stop).not.toHaveBeenCalled();
+    });
+
     it('restarts even when stopping the pipeline fails', async () => {
       const controller = fakeController();
       const pipeline = stubPipeline(config, path.join(tmpDir, 'config.toml'));

@@ -159,6 +159,8 @@ process.env.JIMAKU_DATA_DIR = app.getPath('userData');
 process.env.VBAN_LOCAL_CONFIG_DIR = app.getPath('userData');
 migrateLegacyDataIfNeeded();
 
+const stopBeforeQuit = stopPipelineOnQuit(app, nativeAutoUpdater, () => pipeline ? pipeline.stop() : Promise.resolve());
+
 app.whenReady().then(async () => {
   primeLocalNetworkPermission();
 
@@ -170,7 +172,7 @@ app.whenReady().then(async () => {
 
   pipeline = new Pipeline(configPath);
 
-  const server = createServer({ pipeline, updater: initAutoUpdater(), version: app.getVersion() });
+  const server = createServer({ pipeline, updater: initAutoUpdater(), version: app.getVersion(), stopPipeline: stopBeforeQuit });
   await new Promise<void>((resolve, reject) => {
     server.on('error', reject);
     server.listen(GUI_PORT, '127.0.0.1', resolve);
@@ -186,8 +188,6 @@ app.whenReady().then(async () => {
   console.error('Startup failed:', err);
   app.quit();
 });
-
-stopPipelineOnQuit(app, nativeAutoUpdater, () => pipeline ? pipeline.stop() : Promise.resolve());
 
 app.on('activate', () => {
   if (mainWindow === null) {
