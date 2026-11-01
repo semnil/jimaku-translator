@@ -1,6 +1,5 @@
 // afterPack hook:
-// - Win32: embed icon into exe via rcedit (signAndEditExecutable: false
-//   skips both signing AND icon embedding, so we apply the icon ourselves)
+// - Win32: embed icon and version info into the exe via rcedit
 // - macOS: fix ElectronAsarIntegrity in Info.plist (electron-builder computes
 //   the hash before the asar is finalized, causing a mismatch)
 const path = require('path');

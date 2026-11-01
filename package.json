@@ -12,10 +12,10 @@
     "electron": "npm run build && electron .",
     "electron:dev": "tsx src/electron.ts",
     "clean:dist": "node build/clean-dist.cjs",
-    "dist:win": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --win --publish=never",
-    "dist:mac": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --publish=never && node build/set-min-system-version.cjs && node --env-file-if-exists=.env build/notarize-dmg.cjs",
-    "dist:mac:app": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/out/cli/cli.js --mac --dir --publish=never",
-    "dist:mac:unsigned": "npm run clean:dist && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/out/cli/cli.js --mac --publish=never --config.mac.identity=null --config.mac.notarize=false && node build/set-min-system-version.cjs",
+    "dist:win": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --win --publish=never",
+    "dist:mac": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --mac --publish=never && node build/set-min-system-version.cjs && node --env-file-if-exists=.env build/notarize-dmg.cjs",
+    "dist:mac:app": "npm run clean:dist && npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --mac --dir --publish=never",
+    "dist:mac:unsigned": "npm run clean:dist && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/cli.js --mac --publish=never --config.mac.sign.identity=null --config.mac.notarize=false && node build/set-min-system-version.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
@@ -37,7 +37,7 @@
     "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
     "electron": "^45.1.0",
-    "electron-builder": "^26.18.0",
+    "electron-builder": "27.0.0-alpha.14",
     "rcedit": "^5.0.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
@@ -47,40 +47,16 @@
     "appId": "com.semnil.jimaku-translator",
     "productName": "Jimaku Translator",
     "artifactName": "${name}-${version}-${arch}.${ext}",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/onnxruntime-node/**/*"
-    ],
-    "files": [
-      "dist/*.js",
-      "dist/audio/**/*.js",
-      "dist/obs/**/*.js",
-      "dist/recognition/**/*.js",
-      "dist/subtitle/**/*.js",
-      "dist/ui/**/*",
-      "dist/vban/**/*.js",
-      "models/**/*",
-      "config.toml",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "models",
-        "to": "models"
-      },
-      {
-        "from": "config.toml",
-        "to": "config.toml"
-      },
-      {
-        "from": "THIRD_PARTY_LICENSES.txt",
-        "to": "THIRD_PARTY_LICENSES.txt"
-      }
-    ],
+    "asar": {
+      "unpack": [
+        "node_modules/onnxruntime-node/**/*"
+      ]
+    },
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false
+      "sign": false,
+      "verifyUpdateCodeSignature": false
     },
     "mac": {
       "target": [
@@ -93,20 +69,23 @@
         "en",
         "ja"
       ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true,
-      "extraResources": [
-        {
-          "from": "build/Assets.car",
-          "to": "Assets.car"
-        }
-      ],
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "jimaku-translator connects to OBS Studio and VBAN audio sources on your local network.",
         "CFBundleIconName": "AppIcon"
+      },
+      "sign": {
+        "entitlements": "build/entitlements.mac.plist",
+        "entitlementsInherit": "build/entitlements.mac.plist",
+        "hardenedRuntime": true
+      },
+      "fileOptions": {
+        "extraResources": [
+          {
+            "from": "build/Assets.car",
+            "to": "Assets.car"
+          }
+        ]
       }
     },
     "afterPack": "build/afterPack.cjs",
@@ -121,6 +100,35 @@
         "owner": "semnil",
         "repo": "jimaku-translator"
       }
-    ]
+    ],
+    "fileOptions": {
+      "files": [
+        "dist/*.js",
+        "dist/audio/**/*.js",
+        "dist/obs/**/*.js",
+        "dist/recognition/**/*.js",
+        "dist/subtitle/**/*.js",
+        "dist/ui/**/*",
+        "dist/vban/**/*.js",
+        "models/**/*",
+        "config.toml",
+        "package.json"
+      ],
+      "extraResources": [
+        {
+          "from": "models",
+          "to": "models"
+        },
+        {
+          "from": "config.toml",
+          "to": "config.toml"
+        },
+        {
+          "from": "THIRD_PARTY_LICENSES.txt",
+          "to": "THIRD_PARTY_LICENSES.txt"
+        }
+      ]
+    },
+    "electronUpdaterCompatibility": ">=6"
   }
 }
