@@ -115,7 +115,6 @@ config.toml             default settings
 - **Automatic Whisper server port assignment**: when the managed process is used, a free port is obtained automatically by binding port 0 with `net.createServer`. The server field was removed from the GUI
 - **Window position restore**: on Electron exit, the bounds are saved to `window-state.json` and restored on the next launch. If it is off-display, the default position is used
 - **CJS output**: Electron's `require('electron')` and `onnxruntime-node` do not work correctly through ESM interop, so CommonJS is output with `module: Node16` in `tsconfig.json` and no `"type": "module"` in `package.json`
-- **asar integrity afterPack fix**: electron-builder has a bug where it computes the hash before the asar is finalized, so `afterPack.cjs` recomputes the SHA-256 + 4MB block array and overwrites Info.plist. It uses `execFileSync` (argument array) to prevent command injection
 - **onnxruntime-node is unpacked from the asar**: native `.node` binaries cannot be read from inside an asar, so they are extracted with `build.asar.unpack`
 - **Preventing multiple instances**: `app.requestSingleInstanceLock()` guarantees a single instance. A second launch focuses the existing window
 - **OBS subtitle errors are non-fatal**: failures of `subtitle.show()` are logged separately from OBS connection failures and inference failures. The inference result is kept and shown in the GUI
