@@ -6,7 +6,7 @@ const packageVersion = (JSON.parse(fs.readFileSync(path.resolve(__dirname, '..',
 
 test.use({ locale: 'en-US' });
 
-// Other e2e files may switch the shared server's UI language while these run.
+// Every page here reads ui.language as '' from GET /api/config and follows the en-US locale.
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/config', async (route) => {
     if (route.request().method() !== 'GET') return route.continue();

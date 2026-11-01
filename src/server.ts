@@ -47,8 +47,8 @@ export interface ServerOptions {
 
 /** The version in the package.json next to the build output directory. */
 function readPackageVersion(): string {
-  const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8')) as { version: string };
-  return pkg.version;
+  const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8')) as { version: string };
+  return manifest.version;
 }
 
 export function createServer(opts: ServerOptions): http.Server {

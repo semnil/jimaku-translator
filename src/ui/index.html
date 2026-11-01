@@ -2221,7 +2221,7 @@ label.settings-row input { width: 16px; height: 16px; margin: 0; }
   }
 
   // Controls drawn from the update state.  Focus on a control that becomes
-  // disabled moves to the dialog itself, so keys keep reaching the dialog.
+  // disabled moves to the dialog itself.
   function renderSettings() {
     var disable = {
       'settings-update-launch': !updateState.supported || updateChecking || updateSaving,
@@ -2421,7 +2421,7 @@ label.settings-row input { width: 16px; height: 16px; margin: 0; }
 
   // --- Init ---
   connectSSE();
-  // The launch check waits for the config, which may set the UI language.
+  // The launch check runs once the config, with its UI language, has loaded.
   loadConfig().then(initUpdate);
 })();
 </script>
