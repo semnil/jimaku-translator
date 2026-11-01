@@ -169,7 +169,7 @@ app.whenReady().then(async () => {
 
   pipeline = new Pipeline(configPath);
 
-  const server = createServer({ pipeline });
+  const server = createServer({ pipeline, updater: initAutoUpdater(), version: app.getVersion() });
   await new Promise<void>((resolve, reject) => {
     server.on('error', reject);
     server.listen(GUI_PORT, '127.0.0.1', resolve);
@@ -181,7 +181,6 @@ app.whenReady().then(async () => {
   });
 
   mainWindow = createMainWindow();
-  initAutoUpdater();
 }).catch((err) => {
   console.error('Startup failed:', err);
   app.quit();

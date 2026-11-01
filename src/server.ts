@@ -14,6 +14,7 @@ import {
   MODEL_REGISTRY,
   type DownloadProgress,
 } from './recognition/whisper-setup.js';
+import { UpdateNotOfferedError, type UpdateController } from './update-controller.js';
 
 export const GUI_PORT = 9880;
 
@@ -38,11 +39,33 @@ function hasNonJsonBody(req: http.IncomingMessage): boolean {
 
 export interface ServerOptions {
   pipeline: Pipeline;
+  /** Present only in the packaged app; without it the update endpoints report updates as unsupported. */
+  updater?: UpdateController | null;
+  /** The running version; read from package.json when omitted. */
+  version?: string;
+}
+
+/** The version in the package.json next to the build output directory. */
+function readPackageVersion(): string {
+  const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8')) as { version: string };
+  return pkg.version;
 }
 
 export function createServer(opts: ServerOptions): http.Server {
   const { pipeline } = opts;
   const sseClients = new Set<http.ServerResponse>();
+  const update: UpdateState = {
+    updater: opts.updater ?? null,
+    version: opts.version ?? readPackageVersion(),
+    launchCheckRun: false,
+    installing: false,
+  };
+
+  update.updater?.onRestartError((message) => {
+    console.error(`[updater] restart failed: ${message}`);
+    update.installing = false;
+    broadcast(sseClients, 'update-error', { message });
+  });
 
   pipeline.on('status', (status) => {
     broadcast(sseClients, 'status', status);
@@ -110,6 +133,14 @@ export function createServer(opts: ServerOptions): http.Server {
         await handleDownloadCancel(req, res);
       } else if (url.pathname === '/api/capture' && req.method === 'POST') {
         await handleCapture(req, res, pipeline);
+      } else if (url.pathname === '/api/update/status' && req.method === 'GET') {
+        json(res, updateStatus(update, pipeline));
+      } else if (url.pathname === '/api/update/settings' && req.method === 'POST') {
+        await handleUpdateSettings(req, res, pipeline);
+      } else if (url.pathname === '/api/update/check' && req.method === 'POST') {
+        await handleUpdateCheck(req, res, update, pipeline);
+      } else if (url.pathname === '/api/update/install' && req.method === 'POST') {
+        await handleUpdateInstall(req, res, update);
       } else if (url.pathname === '/api/events' && req.method === 'GET') {
         handleSSE(req, res, sseClients, pipeline);
       } else {
@@ -175,6 +206,9 @@ async function handleSaveConfig(
     res.end(JSON.stringify({ error: 'Missing required config fields' }));
     return;
   }
+
+  // The update section is written only through POST /api/update/settings.
+  config.update = { ...pipeline.getConfig().update };
 
   try {
     validateConfig(config);
@@ -293,6 +327,10 @@ export function configToToml(config: Config): string {
   lines.push('[ui]');
   lines.push(`language = "${e(config.ui.language)}"`);
   lines.push(`show_vad_debug = ${config.ui.show_vad_debug}`);
+  lines.push('');
+
+  lines.push('[update]');
+  lines.push(`check_at_launch = ${config.update.check_at_launch}`);
   lines.push('');
 
   return lines.join('\n');
@@ -512,6 +550,155 @@ async function handleDownloadCancel(
 
   ac.abort();
   json(res, { cancelled: true });
+}
+
+interface UpdateState {
+  updater: UpdateController | null;
+  version: string;
+  /** The launch check runs once per process, whichever page asks first. */
+  launchCheckRun: boolean;
+  installing: boolean;
+}
+
+function updateStatus(update: UpdateState, pipeline: Pipeline) {
+  const supported = update.updater !== null;
+  const launchCheck = pipeline.getConfig().update.check_at_launch;
+  return {
+    current: update.version,
+    supported,
+    launch_check: launchCheck,
+    launch_pending: supported && launchCheck && !update.launchCheckRun,
+  };
+}
+
+function jsonError(res: http.ServerResponse, status: number, error: string): void {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error }));
+}
+
+/** The JSON object in the request body; an empty body reads as {}. Null when the body is not a JSON object. */
+async function readJsonObject(req: http.IncomingMessage): Promise<Record<string, unknown> | null> {
+  const body = await readBody(req, MAX_BODY_SIZE);
+  if (body === '') return {};
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleUpdateSettings(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  pipeline: Pipeline,
+): Promise<void> {
+  const body = await readJsonObject(req);
+  if (body === null) {
+    jsonError(res, 400, 'Invalid JSON');
+    return;
+  }
+  if (typeof body.launch_check !== 'boolean') {
+    jsonError(res, 400, "'launch_check' must be true or false");
+    return;
+  }
+  const config = pipeline.getConfig();
+  const previous = config.update;
+  config.update = { ...previous, check_at_launch: body.launch_check };
+  try {
+    saveConfigToml(config, pipeline.getConfigPath());
+  } catch (err) {
+    config.update = previous;
+    throw err;
+  }
+  json(res, { launch_check: config.update.check_at_launch });
+}
+
+async function handleUpdateCheck(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  update: UpdateState,
+  pipeline: Pipeline,
+): Promise<void> {
+  const body = await readJsonObject(req);
+  if (body === null) {
+    jsonError(res, 400, 'Invalid JSON');
+    return;
+  }
+  if (body.launch !== undefined && typeof body.launch !== 'boolean') {
+    jsonError(res, 400, "'launch' must be true or false");
+    return;
+  }
+  if (!update.updater) {
+    jsonError(res, 409, 'Updates are available in the installed app only');
+    return;
+  }
+  if (body.launch === true) {
+    if (!pipeline.getConfig().update.check_at_launch) {
+      jsonError(res, 409, 'The launch check is turned off');
+      return;
+    }
+    if (update.launchCheckRun) {
+      jsonError(res, 409, 'The launch check has already run');
+      return;
+    }
+    update.launchCheckRun = true;
+  }
+  let version: string | null;
+  try {
+    version = await update.updater.check();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[updater] check failed: ${msg}`);
+    jsonError(res, 502, msg);
+    return;
+  }
+  json(res, version === null ? { available: false } : { available: true, version });
+}
+
+/** Downloads the offered version, answers, then quits the app to install it. */
+async function handleUpdateInstall(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  update: UpdateState,
+): Promise<void> {
+  const body = await readJsonObject(req);
+  if (body === null) {
+    jsonError(res, 400, 'Invalid JSON');
+    return;
+  }
+  if (typeof body.version !== 'string' || body.version === '') {
+    jsonError(res, 400, "Missing or invalid 'version' field");
+    return;
+  }
+  const updater = update.updater;
+  if (!updater) {
+    jsonError(res, 409, 'Updates are available in the installed app only');
+    return;
+  }
+  if (update.installing) {
+    jsonError(res, 409, 'An update is already being installed');
+    return;
+  }
+  update.installing = true;
+  try {
+    await updater.download(body.version);
+  } catch (err) {
+    update.installing = false;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[updater] download failed: ${msg}`);
+    jsonError(res, err instanceof UpdateNotOfferedError ? 409 : 500, msg);
+    return;
+  }
+  // The restart waits for the answer to reach the page, or for the page to go away.
+  if (req.socket.destroyed) {
+    updater.restart();
+    return;
+  }
+  res.on('close', () => updater.restart());
+  json(res, { restarting: true });
 }
 
 function saveConfigToml(config: Config, configPath: string): string {

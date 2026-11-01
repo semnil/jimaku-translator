@@ -477,6 +477,100 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
+/* Settings button + dialog */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.page-head h2 { margin-bottom: 0; }
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: #c0c0e0;
+}
+.settings-toggle:hover:not([aria-disabled="true"]) { background: #2a2a4a; }
+.settings-toggle[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+
+.settings-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 72px 16px 16px;
+  z-index: 9000;
+}
+.settings-scrim[hidden] { display: none; }
+
+.settings-box {
+  width: 100%;
+  max-width: 440px;
+  background: #16213e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.settings-box:focus { outline: none; }
+
+.settings-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b0b0d0;
+  margin-bottom: 8px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+label.settings-row { cursor: pointer; }
+label.settings-row input { width: 16px; height: 16px; margin: 0; }
+.settings-row input:disabled + span { opacity: 0.5; }
+
+.settings-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.settings-version { font-variant-numeric: tabular-nums; }
+.settings-note { font-size: 12px; color: #b0b0d0; }
+.settings-note:empty { display: none; }
+.settings-note.warn { color: #fbbf24; }
+.settings-tag { font-size: 12px; color: #b0b0d0; margin-top: 8px; }
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* Update progress / failure banner */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #1f2147;
+  border: 1px solid #6366f1;
+}
+.update-banner[hidden] { display: none; }
+.update-banner.error { background: #3b1219; border-color: #ef4444; }
+.update-banner span { flex: 1; }
+
 /* Toast notification */
 .toast {
   position: fixed;
@@ -520,8 +614,18 @@ button:focus-visible {
 <body>
 <main class="container">
 
+  <div class="update-banner" id="update-banner" role="status" aria-live="polite" hidden>
+    <span id="update-banner-text"></span>
+    <button type="button" class="secondary" id="update-banner-close" data-i18n="close" hidden>Close</button>
+  </div>
+
   <!-- Status -->
-  <h2>Status</h2>
+  <div class="page-head">
+    <h2>Status</h2>
+    <button type="button" class="settings-toggle" id="settings-toggle" aria-haspopup="dialog" aria-label="Settings" title="Settings" data-i18n-aria-label="settings" data-i18n-title="settings">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19.23 10.44L21.91 10.67L21.91 13.33L19.23 13.56A7.4 7.4 0 0 1 18.22 16.01L18.22 16.01L19.95 18.07L18.07 19.95L16.01 18.22A7.4 7.4 0 0 1 13.56 19.23L13.56 19.23L13.33 21.91L10.67 21.91L10.44 19.23A7.4 7.4 0 0 1 7.99 18.22L7.99 18.22L5.93 19.95L4.05 18.07L5.78 16.01A7.4 7.4 0 0 1 4.77 13.56L4.77 13.56L2.09 13.33L2.09 10.67L4.77 10.44A7.4 7.4 0 0 1 5.78 7.99L5.78 7.99L4.05 5.93L5.93 4.05L7.99 5.78A7.4 7.4 0 0 1 10.44 4.77L10.44 4.77L10.67 2.09L13.33 2.09L13.56 4.77A7.4 7.4 0 0 1 16.01 5.78L16.01 5.78L18.07 4.05L19.95 5.93L18.22 7.99A7.4 7.4 0 0 1 19.23 10.44Z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+  </div>
   <div class="status-grid">
     <div class="status-card">
       <div class="label" data-i18n="input_label">Input</div>
@@ -759,6 +863,30 @@ button:focus-visible {
   </div>
 </main>
 
+<div class="settings-scrim" id="settings-scrim" hidden>
+  <div class="settings-box" id="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+    <h2 id="settings-title" data-i18n="settings">Settings</h2>
+    <section class="settings-section" aria-labelledby="settings-section-title">
+      <h3 id="settings-section-title" data-i18n="update_section">Application version</h3>
+      <label class="settings-row">
+        <input type="checkbox" id="settings-update-launch">
+        <span data-i18n="update_launch">Check at launch</span>
+      </label>
+      <div class="settings-row">
+        <span class="settings-label">
+          <span class="settings-version" id="settings-version">Jimaku Translator</span>
+          <span class="settings-note" id="settings-update-note" role="status" aria-live="polite"></span>
+        </span>
+        <button type="button" class="secondary" id="settings-update-now" data-i18n="update_check_now">Check now</button>
+      </div>
+      <p class="settings-tag" id="settings-installed-only" data-i18n="update_installed_only" hidden>Available in the installed app only.</p>
+    </section>
+    <div class="settings-actions">
+      <button type="button" class="secondary" id="settings-close" data-i18n="close">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
 <script>
@@ -839,6 +967,21 @@ button:focus-visible {
       val_cc_no_source_save: 'Saved, but Closed Caption is enabled with no text source — captions will not be sent',
       // Last Recognition
       result_clear: 'Clear',
+      // Settings dialog + update
+      settings: 'App settings', close: 'Close',
+      update_section: 'Application version',
+      update_launch: 'Check at launch',
+      update_check_now: 'Check now',
+      update_checking: 'Checking…',
+      update_up_to_date: 'Already up to date.',
+      update_available: 'Version {0} is available.',
+      update_check_failed: 'Update check failed.',
+      update_save_failed: 'The setting could not be saved.',
+      update_installed_only: 'Available in the installed app only.',
+      update_confirm: 'Version {0} is available. Update now?\n\nThe app restarts after the update. Subtitles stop until it has restarted.',
+      update_downloading: 'Downloading update… the app will restart',
+      update_install_failed: 'The update could not be downloaded and installed: {0}',
+      update_restart_failed: 'The update was downloaded, but the app could not restart to install it ({0}). Quit the app and open it again.',
     },
     ja: {
       input_label: '入力',
@@ -907,6 +1050,20 @@ button:focus-visible {
       val_cc_no_source: 'クローズドキャプションが有効ですが、テキストソースが選択されていません',
       val_cc_no_source_save: '保存しましたが、CC 有効でソース未選択のため CC は送信されません',
       result_clear: 'クリア',
+      settings: 'アプリの設定', close: '閉じる',
+      update_section: 'アプリケーションのバージョン',
+      update_launch: '起動時に確認',
+      update_check_now: '今すぐ確認',
+      update_checking: '確認しています…',
+      update_up_to_date: '最新バージョンです。',
+      update_available: 'バージョン {0} が利用可能です。',
+      update_check_failed: '更新の確認に失敗しました。',
+      update_save_failed: '設定を保存できませんでした。',
+      update_installed_only: 'インストールしたアプリでのみ使えます。',
+      update_confirm: 'バージョン {0} が利用可能です。今すぐ更新しますか?\n\n更新後にアプリを再起動します。再起動が終わるまで字幕は止まります。',
+      update_downloading: '更新をダウンロード中… 完了後にアプリを再起動します',
+      update_install_failed: '更新をダウンロード・インストールできませんでした: {0}',
+      update_restart_failed: '更新はダウンロードしましたが、インストールのための再起動ができませんでした ({0})。アプリを終了して開き直してください。',
     }
   };
 
@@ -939,6 +1096,7 @@ button:focus-visible {
       var key = el.getAttribute('data-i18n-aria-label');
       if (dict[key]) el.setAttribute('aria-label', dict[key]);
     });
+    renderUpdateText();
   }
 
   applyI18n(currentLang);
@@ -1082,6 +1240,12 @@ button:focus-visible {
     evtSource.addEventListener('download-progress', function(e) {
       var d = JSON.parse(e.data);
       handleDownloadProgress(d);
+    });
+
+    evtSource.addEventListener('update-error', function(e) {
+      var d = JSON.parse(e.data);
+      endInstall();
+      showUpdateBanner('update_restart_failed', d.message, true);
     });
 
     evtSource.onerror = function() {
@@ -1443,7 +1607,7 @@ button:focus-visible {
 
   // --- Config form ---
   function loadConfig() {
-    fetch('/api/config')
+    return fetch('/api/config')
       .then(function(r) { return r.json(); })
       .then(function(c) { fillForm(c); })
       .catch(function(e) { showToast(t('load_config_failed', e.message), true); });
@@ -2008,9 +2172,257 @@ button:focus-visible {
     return str.replace(/[&<>"]/g, function(ch) { return escapeMap[ch]; });
   }
 
+  // --- Settings dialog + update ---
+  // The launch check, "Check now", the confirm and the install go through
+  // /api/update/*; the server keeps "Check at launch" in config.local.toml.
+  var settingsToggle = document.getElementById('settings-toggle');
+  var settingsScrim = document.getElementById('settings-scrim');
+  var settingsBox = document.getElementById('settings-box');
+  var launchToggle = document.getElementById('settings-update-launch');
+  var checkNowBtn = document.getElementById('settings-update-now');
+  var settingsCloseBtn = document.getElementById('settings-close');
+  var updateNoteEl = document.getElementById('settings-update-note');
+  var updateBanner = document.getElementById('update-banner');
+  var updateBannerClose = document.getElementById('update-banner-close');
+  var updateState = { current: '', supported: false, launch_check: true, launch_pending: false };
+  var updateChecking = false;
+  var updateSaving = false;
+  var updateInflight = null;
+  // { key, arg, warn } of the check outcome shown under the version, or null.
+  var updateNote = null;
+  // { key, arg, error } of the banner text, or null while the banner is hidden.
+  var bannerMsg = null;
+  var settingsReturnFocus = null;
+  var settingsInerted = [];
+
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    }).then(function(r) {
+      return r.json().catch(function() { return {}; }).then(function(d) {
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        return d;
+      });
+    });
+  }
+
+  function settingsOpen() {
+    return !!settingsScrim && !settingsScrim.hidden;
+  }
+
+  // Texts drawn from the current language; called by applyI18n().
+  function renderUpdateText() {
+    if (!settingsBox) return;
+    updateNoteEl.textContent = updateNote ? t(updateNote.key, updateNote.arg) : '';
+    updateNoteEl.classList.toggle('warn', !!(updateNote && updateNote.warn));
+    if (bannerMsg) document.getElementById('update-banner-text').textContent = t(bannerMsg.key, bannerMsg.arg);
+  }
+
+  // Controls drawn from the update state.  Focus on a control that becomes
+  // disabled moves to the dialog itself, so keys keep reaching the dialog.
+  function renderSettings() {
+    var disable = {
+      'settings-update-launch': !updateState.supported || updateChecking || updateSaving,
+      'settings-update-now': !updateState.supported || updateChecking,
+      'settings-close': updateChecking,
+    };
+    var active = document.activeElement;
+    if (settingsOpen() && active && disable[active.id]) settingsBox.focus({ preventScroll: true });
+    launchToggle.disabled = disable['settings-update-launch'];
+    checkNowBtn.disabled = disable['settings-update-now'];
+    settingsCloseBtn.disabled = disable['settings-close'];
+    launchToggle.checked = updateState.launch_check !== false;
+    document.getElementById('settings-version').textContent = 'Jimaku Translator ' + updateState.current;
+    document.getElementById('settings-installed-only').hidden = updateState.supported;
+    renderUpdateText();
+  }
+
+  function setUpdateNote(key, arg, warn) {
+    updateNote = key ? { key: key, arg: arg, warn: !!warn } : null;
+    renderUpdateText();
+  }
+
+  function showUpdateBanner(key, arg, isError) {
+    bannerMsg = { key: key, arg: arg, error: !!isError };
+    updateBanner.classList.toggle('error', !!isError);
+    updateBannerClose.hidden = !isError;
+    updateBanner.hidden = false;
+    renderUpdateText();
+    fitWindowHeight();
+  }
+
+  updateBannerClose.addEventListener('click', function() {
+    bannerMsg = null;
+    updateBanner.hidden = true;
+    fitWindowHeight();
+    settingsToggle.focus({ preventScroll: true });
+  });
+
+  function openSettings() {
+    if (settingsOpen() || settingsToggle.getAttribute('aria-disabled') === 'true') return;
+    settingsReturnFocus = document.activeElement;
+    updateNote = null;
+    renderSettings();
+    settingsInerted = Array.prototype.filter.call(document.body.children, function(node) {
+      return node !== settingsScrim && node !== toast && node.tagName !== 'SCRIPT' && !node.inert;
+    });
+    settingsInerted.forEach(function(node) { node.inert = true; });
+    settingsScrim.hidden = false;
+    settingsCloseBtn.focus({ preventScroll: true });
+  }
+
+  function closeSettings() {
+    if (!settingsOpen()) return;
+    settingsScrim.hidden = true;
+    settingsInerted.forEach(function(node) { node.inert = false; });
+    settingsInerted = [];
+    var target = settingsReturnFocus && document.contains(settingsReturnFocus) && settingsReturnFocus !== document.body
+      ? settingsReturnFocus : settingsToggle;
+    settingsReturnFocus = null;
+    target.focus({ preventScroll: true });
+  }
+
+  // Every dismissal is refused while a manual check is in flight.
+  function requestCloseSettings() {
+    if (!updateChecking) closeSettings();
+  }
+
+  settingsToggle.addEventListener('click', openSettings);
+  settingsCloseBtn.addEventListener('click', requestCloseSettings);
+  checkNowBtn.addEventListener('click', function() { runManualCheck(); });
+  launchToggle.addEventListener('change', function() { setLaunchCheck(launchToggle.checked); });
+
+  // Only a press that starts on the scrim itself dismisses (a drag out of the box does not).
+  settingsScrim.addEventListener('mousedown', function(e) {
+    if (e.target !== settingsScrim) return;
+    e.preventDefault();
+    requestCloseSettings();
+  });
+
+  settingsBox.addEventListener('keydown', function(e) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      requestCloseSettings();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    var nodes = Array.prototype.filter.call(settingsBox.querySelectorAll('button, input'), function(node) {
+      return !node.disabled;
+    });
+    if (nodes.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    var first = nodes[0], last = nodes[nodes.length - 1];
+    var onDialog = document.activeElement === settingsBox || !settingsBox.contains(document.activeElement);
+    if (e.shiftKey && (document.activeElement === first || onDialog)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || onDialog)) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  // Saved one at a time: the toggle is disabled until the server answers, then
+  // drawn from the saved value, or from the previous value after a failed save.
+  function setLaunchCheck(on) {
+    var previous = updateState.launch_check !== false;
+    updateSaving = true;
+    updateState.launch_check = on;
+    renderSettings();
+    postJson('/api/update/settings', { launch_check: on }).then(function(d) {
+      updateState.launch_check = d.launch_check !== false;
+      setUpdateNote(null);
+    }, function() {
+      updateState.launch_check = previous;
+      setUpdateNote('update_save_failed', undefined, true);
+    }).then(function() {
+      updateSaving = false;
+      renderSettings();
+      if (settingsOpen() && !launchToggle.disabled) launchToggle.focus({ preventScroll: true });
+    });
+  }
+
+  // The check and its confirm; settles once the user has answered.  A call
+  // made while one is in flight (the launch check and "Check now") shares it.
+  function checkForUpdates(launch) {
+    if (!updateInflight) {
+      updateInflight = checkAndConfirm(launch).then(function(outcome) {
+        updateInflight = null;
+        return outcome;
+      });
+    }
+    return updateInflight;
+  }
+
+  function checkAndConfirm(launch) {
+    return postJson('/api/update/check', launch ? { launch: true } : {}).then(function(d) {
+      if (!d.available) return { kind: 'upToDate' };
+      if (!window.confirm(t('update_confirm', d.version))) return { kind: 'declined', version: d.version };
+      closeSettings();
+      startInstall(d.version);
+      return { kind: 'installing', version: d.version };
+    }, function() {
+      return { kind: 'failed' };
+    });
+  }
+
+  // Download, then the server quits the app to install it.  A failure says
+  // what failed and makes the settings button available again.
+  function startInstall(version) {
+    settingsToggle.setAttribute('aria-disabled', 'true');
+    showUpdateBanner('update_downloading', undefined, false);
+    postJson('/api/update/install', { version: version }).catch(function(e) {
+      endInstall();
+      showUpdateBanner('update_install_failed', e.message, true);
+    });
+  }
+
+  function endInstall() {
+    settingsToggle.removeAttribute('aria-disabled');
+  }
+
+  function runManualCheck() {
+    updateChecking = true;
+    renderSettings();
+    setUpdateNote('update_checking');
+    checkForUpdates(false).then(function(outcome) {
+      updateChecking = false;
+      if (!settingsOpen()) return;
+      renderSettings();
+      checkNowBtn.focus({ preventScroll: true });
+      if (outcome.kind === 'upToDate') setUpdateNote('update_up_to_date');
+      else if (outcome.kind === 'declined') setUpdateNote('update_available', outcome.version);
+      else if (outcome.kind === 'failed') setUpdateNote('update_check_failed', undefined, true);
+      else setUpdateNote(null);
+    });
+  }
+
+  // Ask the server what it runs and whether it can install, then run the
+  // launch check when it is pending.
+  function initUpdate() {
+    return fetch('/api/update/status').then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(d) {
+      updateState = d;
+    }, function() {
+      updateState = { current: '', supported: false, launch_check: true, launch_pending: false };
+    }).then(function() {
+      if (settingsOpen() && !updateChecking) renderSettings();
+      if (updateState.launch_pending) return checkForUpdates(true);
+    });
+  }
+
   // --- Init ---
   connectSSE();
-  loadConfig();
+  // The launch check waits for the config, which may set the UI language.
+  loadConfig().then(initUpdate);
 })();
 </script>
 </body>

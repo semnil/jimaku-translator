@@ -35,3 +35,6 @@ adaptive_gate_max_db = -30        # upper limit of the adaptive gate (dBFS); pre
 [ui]
 language = ""               # "" = auto-detect from system, "en" or "ja" to override
 show_vad_debug = false      # overlay the VAD debug display (prob/threshold/diag) on the graph
+
+[update]
+check_at_launch = true      # check GitHub Releases for a newer version when the GUI opens (packaged app only)

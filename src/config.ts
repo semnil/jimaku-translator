@@ -63,6 +63,10 @@ export interface Config {
     /** Show VAD debug overlays (prob line, threshold, diag text) on the audio plot. */
     show_vad_debug: boolean;
   };
+  update: {
+    /** Check for a newer release when the GUI opens. Written only through POST /api/update/settings. */
+    check_at_launch: boolean;
+  };
 }
 
 const DEFAULTS: Config = {
@@ -88,6 +92,7 @@ const DEFAULTS: Config = {
     adaptive_gate_max_db: -30,
   },
   ui: { language: '', show_vad_debug: false },
+  update: { check_at_launch: true },
 };
 
 export function getLocalConfigPath(configPath: string): string {
@@ -130,6 +135,7 @@ export function loadConfig(configPath: string): Config {
     vad: { ...DEFAULTS.vad, ...parsed.vad },
     audio: { ...DEFAULTS.audio, ...parsed.audio },
     ui: { ...DEFAULTS.ui, ...parsed.ui },
+    update: { ...DEFAULTS.update, ...parsed.update },
   };
 
   // Auto-resolve binary/model paths from variant/name selection keys.
@@ -213,6 +219,9 @@ export function validateConfig(c: Config): void {
   }
   if (c.ui.language !== '' && c.ui.language !== 'en' && c.ui.language !== 'ja') {
     errors.push(`ui.language must be "", "en", or "ja", got "${c.ui.language}"`);
+  }
+  if (typeof c.update.check_at_launch !== 'boolean') {
+    errors.push(`update.check_at_launch must be true or false, got ${JSON.stringify(c.update.check_at_launch)}`);
   }
 
   if (errors.length > 0) {
