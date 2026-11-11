@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const pkg = require('../package.json');
+const { developerIdIdentity } = require('./signing-identity.cjs');
 
 const { APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID } = process.env;
 if (!APPLE_ID || !APPLE_APP_SPECIFIC_PASSWORD || !APPLE_TEAM_ID) {
@@ -22,7 +23,7 @@ if (dmgs.length === 0) {
   process.exit(1);
 }
 
-const identity = `Developer ID Application: Tetsuya Shinone (${APPLE_TEAM_ID})`;
+const identity = developerIdIdentity(APPLE_TEAM_ID);
 const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' });
 
 for (const dmg of dmgs) {
