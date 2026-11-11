@@ -7,6 +7,13 @@ const recognitionMode = !!process.env.JT_E2E_RECOGNITION;
 const e2eConfigDir = path.join(os.tmpdir(), `jimaku-e2e-${process.pid}`);
 fs.mkdirSync(e2eConfigDir, { recursive: true });
 
+// The E2E server listens for VBAN on its own port, so audio that OBS sends to
+// the default port (6980) on this machine does not mix into the fixtures.
+// The tests read the port from JT_E2E_VBAN_PORT.
+const e2eVbanPort = Number(process.env.JT_E2E_VBAN_PORT) || 16980;
+process.env.JT_E2E_VBAN_PORT = String(e2eVbanPort);
+const localToml = ['[vban]', `port = ${e2eVbanPort}`, ''];
+
 // In recognition mode, the pipeline must boot with a real whisper binary +
 // model already wired up — POST /api/config does NOT restart the managed
 // process. Pre-write a config.local.toml with detected paths and reuse the
@@ -26,15 +33,14 @@ if (recognitionMode) {
     .find((m) => fs.existsSync(m.path));
   if (brewServer && modelEntry) {
     const modelName = modelEntry.file.replace(/^ggml-/, '').replace(/\.bin$/, '');
-    const toml = [
+    localToml.push(
       '[whisper]',
       `binary = "${brewServer}"`,
       `binary_variant = "homebrew"`,
       `model = "${modelEntry.path}"`,
       `model_name = "${modelName}"`,
       '',
-    ].join('\n');
-    fs.writeFileSync(path.join(e2eConfigDir, 'config.local.toml'), toml);
+    );
     serverEnv.JIMAKU_DATA_DIR = realDataDir.replace(/\/whisper$/, '');
   } else {
     serverEnv.JIMAKU_DATA_DIR = e2eConfigDir;
@@ -42,6 +48,8 @@ if (recognitionMode) {
 } else {
   serverEnv.JIMAKU_DATA_DIR = e2eConfigDir;
 }
+
+fs.writeFileSync(path.join(e2eConfigDir, 'config.local.toml'), localToml.join('\n'));
 
 export default defineConfig({
   testDir: './e2e',

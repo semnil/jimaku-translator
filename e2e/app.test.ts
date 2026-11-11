@@ -1054,7 +1054,9 @@ test.describe('Recognition E2E', () => {
         }, 0);
 
         const sendStart = Date.now();
-        const sendPromise = sendVbanWavs([path.join(fixturesDir, file)]);
+        const sendPromise = sendVbanWavs([path.join(fixturesDir, file)], {
+          port: Number(process.env.JT_E2E_VBAN_PORT),
+        });
 
         try {
           const ev = await sse.waitFor((e) => {
