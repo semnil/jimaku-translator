@@ -2,7 +2,7 @@
 
 > 日本語版は [subtitle-dispatch.ja.md](subtitle-dispatch.ja.md) を参照してください.
 
-Closed decisions about how [src/subtitle/manager.ts](../../src/subtitle/manager.ts) sends recognition results to OBS, with the alternatives that were turned down. The behavior itself is in [CLAUDE.md](../../CLAUDE.md) "The subtitle send queue keeps everything FIFO" and "Last Recognition's left sidebar".
+Closed decisions about how [src/subtitle/manager.ts](../../src/subtitle/manager.ts) sends recognition results to OBS, with the alternatives that were turned down. The behavior itself is in [AGENTS.md](../../AGENTS.md) "The subtitle send queue keeps everything FIFO" and "Last Recognition's left sidebar".
 
 ## The send queue keeps filling while OBS is disconnected
 

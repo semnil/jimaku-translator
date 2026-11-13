@@ -2,7 +2,7 @@
 
 > For the English version, see [english-base.md](english-base.md).
 
-このリポジトリの文書を英語基本にしたとき ([#87](https://github.com/semnil/jimaku-translator/pull/87)、[#88](https://github.com/semnil/jimaku-translator/pull/88)) に閉じた判断と、却下した案を持つ。構成そのものは [CLAUDE.md](../../CLAUDE.md) の「Conventions」にある。
+このリポジトリの文書を英語基本にしたとき ([#87](https://github.com/semnil/jimaku-translator/pull/87)、[#88](https://github.com/semnil/jimaku-translator/pull/88)) に閉じた判断と、却下した案を持つ。構成そのものは [AGENTS.md](../../AGENTS.md) の「Conventions」にある。
 
 ## issue テンプレートは英日併記のまま残す
 

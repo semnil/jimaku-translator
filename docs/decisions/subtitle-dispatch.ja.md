@@ -2,7 +2,7 @@
 
 > For the English version, see [subtitle-dispatch.md](subtitle-dispatch.md).
 
-[src/subtitle/manager.ts](../../src/subtitle/manager.ts) が認識結果を OBS へ送る方法について閉じた判断と、却下した案を持つ。挙動そのものは [CLAUDE.md](../../CLAUDE.md) の「The subtitle send queue keeps everything FIFO」と「Last Recognition's left sidebar」にある。
+[src/subtitle/manager.ts](../../src/subtitle/manager.ts) が認識結果を OBS へ送る方法について閉じた判断と、却下した案を持つ。挙動そのものは [AGENTS.md](../../AGENTS.md) の「The subtitle send queue keeps everything FIFO」と「Last Recognition's left sidebar」にある。
 
 ## 送信のキューは OBS の切断中も積み続ける
 
