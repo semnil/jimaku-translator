@@ -2,7 +2,7 @@
 
 > 日本語版は [english-base.ja.md](english-base.ja.md) を参照してください.
 
-Closed decisions from making English the base language of this repository's documents ([#87](https://github.com/semnil/jimaku-translator/pull/87), [#88](https://github.com/semnil/jimaku-translator/pull/88)), with the alternatives that were turned down. The layout itself is in [CLAUDE.md](../../CLAUDE.md) "Conventions".
+Closed decisions from making English the base language of this repository's documents ([#87](https://github.com/semnil/jimaku-translator/pull/87), [#88](https://github.com/semnil/jimaku-translator/pull/88)), with the alternatives that were turned down. The layout itself is in [AGENTS.md](../../AGENTS.md) "Conventions".
 
 ## Issue templates stay bilingual
 

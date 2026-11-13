@@ -2,7 +2,7 @@
 
 > For the English version, see [release.md](release.md).
 
-jimaku-translator のビルドとリリースについて閉じた判断と、却下した案を持つ。流れそのものは [CLAUDE.md](../../CLAUDE.md) の「GitHub Actions release」と「auto-update」にあり、この文書は、なぜその形なのかを持つ。
+jimaku-translator のビルドとリリースについて閉じた判断と、却下した案を持つ。流れそのものは [AGENTS.md](../../AGENTS.md) の「GitHub Actions release」と「auto-update」にあり、この文書は、なぜその形なのかを持つ。
 
 ## main の ruleset で rebase マージを外す
 
@@ -28,4 +28,4 @@ jimaku-translator のビルドとリリースについて閉じた判断と、�
 - **決定** (2026-11-01): [#126](https://github.com/semnil/jimaku-translator/pull/126) で足した更新の確認ダイアログは、モックとハーネスを使うテストだけでマージした。その範囲は、ダイアログそのもの、承諾したとき (ダウンロード、`quitAndInstall(true, true)`、再起動)、断ったとき (何もダウンロードしない)。インストールしたアプリでの流れは、ダイアログが出うる最初の更新で確かめる。
 - **待つ理由**: 動く updater は、インストール済みのアプリのもの。v1.2.0 より古いアプリは尋ねずに更新するので、ダイアログが最初に出るのは、#126 を含む最初のリリースである v1.2.0 のアプリが、それより後のリリースへ更新するとき。
 - **そのとき確かめること**: macOS では、アプリが新しい版で再起動すること。Windows では、インストーラーが自分のウィンドウを出さず、アプリが再起動すること。どちらでも、再起動の後に whisper-server のプロセスが残っていないこと。
-- **閉じる条件**: v1.2.0 の後に公開する最初のリリースで、確かめ終えたとき。そこで CLAUDE.md の「auto-update」との違いが見つかったら、その次のリリースの前に直す。
+- **閉じる条件**: v1.2.0 の後に公開する最初のリリースで、確かめ終えたとき。そこで AGENTS.md の「auto-update」との違いが見つかったら、その次のリリースの前に直す。
