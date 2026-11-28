@@ -33,12 +33,16 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # `queue: max` keeps every run that waits for the one in progress, in the order they started
+    # waiting. The default keeps one and cancels it when another arrives, so a re-run of a run for
+    # an older head would cancel the waiting run for the head and leave its required check cancelled.
     concurrency:
       group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+      queue: max
     steps:
       - id: metadata
         if: github.event.pull_request.user.login == 'dependabot[bot]'
-        continue-on-error: true # the deciding step keeps auto-merge off and the check passes (dependabot-auto-merge-test.sh:160)
+        continue-on-error: true # the deciding step keeps auto-merge off and the check passes (dependabot-auto-merge-test.sh:164)
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
       - name: Enable auto-merge for a patch or minor update Dependabot alone wrote, disable it otherwise
         if: github.event.pull_request.user.login == 'dependabot[bot]'

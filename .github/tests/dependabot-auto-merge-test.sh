@@ -2,7 +2,8 @@
 # Checks that dependabot-auto-merge.yml reports `auto-merge` on every pull request: only pull_request starts it, with
 # no filter, the job has no condition of its own, and its two steps alone are limited to pull requests dependabot[bot]
 # opened; a failure of the metadata step lets the job go on to the deciding step, and the runs for one pull request
-# share a concurrency group. Then runs the step that decides, against a fake gh that answers the pull request's
+# share a concurrency group that keeps every waiting run.
+# Then runs the step that decides, against a fake gh that answers the pull request's
 # commit list, head and auto-merge state from fixtures, for each metadata outcome, update type and commit history:
 # auto-merge is enabled (pinned to the head) only for a patch or minor fetch-metadata classified, that does not
 # include electron-builder, and whose pull request is one commit at the head that dependabot[bot] wrote, GitHub (web-flow) committed and GitHub verified the
@@ -44,11 +45,14 @@ expect 'the job has no condition' "$(yq -r '.jobs.auto-merge | has("if")' "$work
 expect 'the job has two steps' "$(yq -r '.jobs.auto-merge.steps | length' "$workflow_path")" '2'
 expect 'the metadata step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[0].if' "$workflow_path")" "$author_condition"
 expect 'the deciding step is limited to Dependabot' "$(yq -r '.jobs.auto-merge.steps[1].if' "$workflow_path")" "$author_condition"
-# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:41).
+# The deciding step runs after a failed metadata step only when that failure does not fail the job (dependabot-auto-merge.yml:45).
 expect 'a failed metadata step does not fail the job' "$(yq -r '.jobs.auto-merge.steps[0].continue-on-error' "$workflow_path")" 'true'
 expect 'the deciding step reads the metadata outcome' "$(yq -r '.jobs.auto-merge.steps[1].env.METADATA_OUTCOME' "$workflow_path")" "\${{ steps.metadata.outcome }}"
 expect 'the deciding step reads the dependency names' "$(yq -r '.jobs.auto-merge.steps[1].env.DEPENDENCY_NAMES' "$workflow_path")" "\${{ steps.metadata.outputs.dependency-names }}"
 expect 'the runs for one pull request share a concurrency group' "$(yq -r '.jobs.auto-merge.concurrency.group' "$workflow_path")" "dependabot-auto-merge-\${{ github.event.pull_request.number }}"
+# The default queue keeps one waiting run and cancels it when another arrives (dependabot-auto-merge.yml:41).
+expect 'every run that waits for another run for the pull request stays queued' "$(yq -r '.jobs.auto-merge.concurrency.queue' "$workflow_path")" 'max'
+expect 'no run for the pull request cancels the one in progress' "$(yq -r '.jobs.auto-merge.concurrency.cancel-in-progress' "$workflow_path")" 'null'
 
 yq -r '.jobs.auto-merge.steps[1].run' "$workflow_path" > "$work/step.sh"
 mkdir "$work/bin"
