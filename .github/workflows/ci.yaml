@@ -30,6 +30,11 @@ jobs:
 
       - name: Install Dependencies 📦
         timeout-minutes: 10
+        # On linux/x64 the onnxruntime-node install script fetches the CUDA execution provider from
+        # api.nuget.org; the app runs Silero VAD on the CPU provider bundled in the npm package, so
+        # skip that fetch and keep the install off a host outside the npm registry.
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: npm ci
 
       - name: Build 🛠️
